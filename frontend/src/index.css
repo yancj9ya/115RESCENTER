@@ -1,0 +1,54 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+  font-family: "Segoe UI", "Microsoft YaHei UI", "PingFang SC", Arial, sans-serif;
+  font-size: 16px;
+  font-synthesis: none;
+  text-rendering: geometricPrecision;
+  background: #050812;
+  color: #dbe7ff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 20rem;
+  min-height: 100%;
+  background: #050812;
+}
+
+body {
+  margin: 0;
+  min-width: 20rem;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(58, 139, 255, 0.14), transparent 26rem),
+    linear-gradient(135deg, #050812 0%, #08111f 52%, #050812 100%);
+  line-height: 1.45;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+::selection {
+  background: rgba(83, 211, 255, 0.28);
+  color: #ffffff;
+}

@@ -1,0 +1,73 @@
+# ============================================================================
+# 运行时配置
+# ============================================================================
+
+runtime:
+  # 是否启用运行时调度器（可选，默认 false）
+  # 说明：启用后会自动运行采集、订阅、转存、整理等任务
+  # 注意：需要配置相关模块的参数才能正常工作
+  enabled: true
+
+  # 调度间隔（秒）（可选，默认 5）
+  # 说明：运行时调度器的主循环间隔时间
+  # 建议：不要设置过小，避免频繁调度消耗资源
+  interval_seconds: 5
+
+  # 每次处理的最大项目数（可选，默认 3）
+  # 说明：每个组件每次调度处理的最大项目数
+  # 建议：根据服务器性能和文件大小调整
+  max_items_per_tick: 3
+
+  # 榜单缓存刷新间隔（秒）（可选，默认 14400 = 4 小时）
+  # 说明：worker 每个 tick 检查榜单缓存是否过期，超过此间隔则后台刷新一遍
+  #       （4 个腾讯频道榜 + 4 个 TMDB 榜）。冷启动（缓存为空）会立即刷新一次。
+  # 建议：腾讯/TMDB 榜单变化不频繁，4 小时足够；不宜过小以免频繁外部请求。
+  rank_refresh_interval_seconds: 14400
+
+  # 数据库路径（可选，默认 queue.db）
+  # 说明：SQLite 数据库文件的路径
+  # 建议：使用绝对路径或相对于项目根目录的路径
+  db_path: "queue.db"
+
+  # 组件配置
+  components:
+    # Telegram 采集器
+    telegram_collector:
+      # 是否启用（可选，默认 false）
+      enabled: false
+      # 采集间隔（秒）（可选，默认 300）
+      interval_seconds: 300
+
+    # 订阅处理器
+    subscription_processor:
+      # 是否启用（可选，默认 false）
+      enabled: false
+      # 处理间隔（秒）（可选，默认 60）
+      interval_seconds: 60
+
+    # 转存处理器
+    transfer_processor:
+      # 是否启用（可选，默认 false）
+      enabled: false
+      # 处理间隔（秒）（可选，默认 30）
+      interval_seconds: 30
+
+    # 整理器
+    organizer:
+      # 是否启用（可选，默认 false）
+      enabled: false
+      # 整理间隔（秒）（可选，默认 300）
+      interval_seconds: 300
+
+  # 兼容性配置
+  compatibility:
+    # .env 文件路径（可选）
+    # 说明：用于兼容旧的环境变量配置方式
+    # 注意：YAML 配置优先级高于 .env 文件
+    # 设置为 null 则不加载 .env 文件
+    dotenv_path: null
+
+    # 是否允许环境变量覆盖（可选，默认 false）
+    # 说明：启用后环境变量会覆盖 YAML 配置
+    # 注意：仅用于特殊场景，一般不建议启用
+    allow_env_override: false

@@ -1,0 +1,42 @@
+# --- Secrets (live config with 115 cookies / TMDB token / bot tokens) ---
+.env
+config/netdisk.yml
+config/tmdb.yml
+config/notification.yml
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- Databases & backups ---
+*.db
+*.db-wal
+*.db-shm
+*.db.bak-*
+
+# --- p115client cache ---
+.p115client.cache.d/
+
+# --- Logs ---
+logs/
+*.log
+
+# --- Frontend ---
+frontend/node_modules/
+frontend/dist/
+test-results/
+
+# --- Tooling / scratch ---
+.tmp/
+.tmp_rt.json
+.omc/
+.omo/
+.claude/
+
+# --- OS ---
+.DS_Store
+Thumbs.db
