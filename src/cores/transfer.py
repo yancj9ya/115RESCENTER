@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 from typing import Any, Protocol
 
 from src.events import Event, EventBus, TRANSFER_DONE
 from src.notifications import build_transfer_summary
 
 from .base import CoreResult
+
+logger = logging.getLogger(__name__)
 
 CORE_NAME = "transfer"
 
@@ -83,5 +86,10 @@ class TransferCore:
         if self._notifier is None:
             return
         event = build_transfer_summary(succeeded=succeeded, failed=failed)
-        if event is not None:
+        if event is None:
+            return
+        # 通知是旁路：失败（webhook 超时/token 失效等）不能拖垮转存核心或冒泡出 run()。
+        try:
             self._notifier.notify(self._source, event)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"转存通知发送失败（已忽略）: {exc}")

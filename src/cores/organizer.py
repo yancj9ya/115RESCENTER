@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any, Protocol
 
 from src.events import Event, EventBus, ORGANIZE_DONE
 from src.notifications import OrganizeItemSummary, build_organize_summary
 
 from .base import CoreResult
+
+logger = logging.getLogger(__name__)
 
 CORE_NAME = "organizer"
 
@@ -62,8 +65,9 @@ class OrganizerCore:
         else:
             status = "success"
 
-        self._notify_summary(result)
+        # 先发事件再发通知：通知是旁路，其失败不能阻止 ORGANIZE_DONE 级联。
         self._bus.publish(Event(name=ORGANIZE_DONE, source=self._source))
+        self._notify_summary(result)
 
         return CoreResult(
             core=CORE_NAME,
@@ -84,10 +88,15 @@ class OrganizerCore:
         run_id = getattr(result, "run_id", None)
         if run_id is None:
             return
-        summaries = _success_item_summaries(self._item_reader.list_run_items(int(run_id)))
-        event = build_organize_summary(summaries)
-        if event is not None:
+        # 整个通知旁路（读 run items + 构建 + 发送）失败都不能拖垮整理核心或冒泡出 run()。
+        try:
+            summaries = _success_item_summaries(self._item_reader.list_run_items(int(run_id)))
+            event = build_organize_summary(summaries)
+            if event is None:
+                return
             self._notifier.notify(self._source, event)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"整理通知发送失败（已忽略）: {exc}")
 
 
 def _success_item_summaries(items: list[Any]) -> list[OrganizeItemSummary]:

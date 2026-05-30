@@ -21,12 +21,19 @@ class _FakeCollector:
 
 
 class _FakeDiscovery:
-    def __init__(self, mapping: dict[str, list[TmdbSearchResult]]) -> None:
+    def __init__(
+        self,
+        mapping: dict[str, list[TmdbSearchResult]],
+        errors: dict[str, Exception] | None = None,
+    ) -> None:
         self._mapping = mapping
+        self._errors = errors or {}
         self.queries: list[str] = []
 
     def search_multi(self, query: str, *, limit: int = 10) -> list[TmdbSearchResult]:
         self.queries.append(query)
+        if query in self._errors:
+            raise self._errors[query]
         return self._mapping.get(query, [])
 
 
@@ -171,6 +178,48 @@ class TencentRankEnricherTest(unittest.TestCase):
 
         self.assertEqual([i.tmdb_id for i in items], [30])
         self.assertEqual(items[0].kind, "movie")
+
+    def test_single_lookup_error_hides_only_that_item(self) -> None:
+        from src.organizing.tmdb import TmdbRetryableError
+
+        collector = _FakeCollector(
+            [
+                TencentRankItem(rank=1, title="正常剧", raw_title="正常剧"),
+                TencentRankItem(rank=2, title="抖动剧", raw_title="抖动剧"),
+                TencentRankItem(rank=3, title="另一剧", raw_title="另一剧"),
+            ]
+        )
+        # 「抖动剧」反查触发 TMDB 瞬时断连，应只隐藏该条，其余正常富化
+        discovery = _FakeDiscovery(
+            {
+                "正常剧": [_result(11, "正常剧", kind="tv")],
+                "另一剧": [_result(33, "另一剧", kind="tv")],
+            },
+            errors={"抖动剧": TmdbRetryableError("Server disconnected")},
+        )
+        enricher = TencentRankEnricher(collector=collector, discovery=discovery)
+
+        items = enricher.enrich_channel("tv")  # 不应抛出
+
+        self.assertEqual([i.tmdb_id for i in items], [11, 33])
+        self.assertEqual([i.rank for i in items], [1, 2])
+
+    def test_generic_lookup_error_also_hidden(self) -> None:
+        collector = _FakeCollector(
+            [
+                TencentRankItem(rank=1, title="炸裂", raw_title="炸裂"),
+                TencentRankItem(rank=2, title="稳的", raw_title="稳的"),
+            ]
+        )
+        discovery = _FakeDiscovery(
+            {"稳的": [_result(22, "稳的", kind="tv")]},
+            errors={"炸裂": RuntimeError("boom")},
+        )
+        enricher = TencentRankEnricher(collector=collector, discovery=discovery)
+
+        items = enricher.enrich_channel("tv")
+
+        self.assertEqual([i.tmdb_id for i in items], [22])
 
 
 if __name__ == "__main__":

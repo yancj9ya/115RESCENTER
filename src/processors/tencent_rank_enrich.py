@@ -85,7 +85,12 @@ class TencentRankEnricher:
         return enriched
 
     def _best_match(self, title: str, expected_kind: str | None) -> TmdbSearchResult | None:
-        results = self._discovery.search_multi(title, limit=_MATCH_CANDIDATES)
+        # 单条反查失败（TMDB 瞬时断连等）只隐藏该条，不能中止整榜刷新。
+        try:
+            results = self._discovery.search_multi(title, limit=_MATCH_CANDIDATES)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"腾讯榜单项「{title}」反查 TMDB 失败（已隐藏该条）: {exc}")
+            return None
         if not results:
             return None
         if expected_kind is None:

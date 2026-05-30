@@ -4,7 +4,7 @@ import unittest
 
 from src.cores.organizer import OrganizerCore
 from src.cores.transfer import TransferCore
-from src.events import EventBus
+from src.events import EventBus, ORGANIZE_DONE, TRANSFER_DONE
 from src.notifications import NotificationEvent
 
 
@@ -18,6 +18,25 @@ class _RecordingNotifier:
 
     def notify(self, source: str, event: NotificationEvent) -> None:
         self.calls.append((source, event))
+
+
+class _ThrowingNotifier:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def notify(self, source: str, event: NotificationEvent) -> None:
+        self.calls += 1
+        raise RuntimeError("webhook 超时")
+
+
+class _EventCapturingBus(EventBus):
+    def __init__(self) -> None:
+        super().__init__()
+        self.published: list[str] = []
+
+    def publish(self, event: object) -> None:  # type: ignore[override]
+        self.published.append(str(getattr(event, "name", "")))
+        super().publish(event)  # type: ignore[arg-type]
 
 
 class _Result:
@@ -106,6 +125,40 @@ class TransferCoreNotificationTest(unittest.TestCase):
         source, event = notifier.calls[0]
         self.assertEqual(source, "transfer")
         self.assertIn("2", event.message)
+
+    def test_notifier_failure_does_not_break_run_or_event(self) -> None:
+        bus = _EventCapturingBus()
+        processor = _TransferProcessor([_Result(claimed=True, error=None)])
+        core = TransferCore(bus=bus, processor=processor, notifier=_ThrowingNotifier())
+
+        result = core.run()  # 不应抛出
+
+        self.assertEqual(result.status, "success")
+        self.assertEqual(result.succeeded, 1)
+        self.assertIn(TRANSFER_DONE, bus.published)
+
+
+class OrganizerCoreNotificationFailureTest(unittest.TestCase):
+    def test_notifier_failure_does_not_break_run_and_event_still_published(self) -> None:
+        bus = _EventCapturingBus()
+        items = [
+            _Result(status="SUCCESS", metadata_json='{"tmdb_id": 111, "title": "逐玉"}', new_name="a", file_name="a"),
+        ]
+        core = OrganizerCore(
+            bus=bus,
+            service=_OrganizeService(
+                _Result(status="SUCCESS", run_id=7, scanned_count=1, success_count=1, skipped_count=0, failed_count=0, last_error=None)
+            ),
+            staging_cid=999,
+            notifier=_ThrowingNotifier(),
+            item_reader=_ItemReader(items),
+        )
+
+        result = core.run()  # 不应抛出
+
+        self.assertEqual(result.status, "success")
+        # 通知失败不能阻止 ORGANIZE_DONE 发布
+        self.assertIn(ORGANIZE_DONE, bus.published)
 
 
 if __name__ == "__main__":
