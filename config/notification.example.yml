@@ -1,0 +1,32 @@
+# ============================================================================
+# 通知配置（模板）
+# 用法：复制为 config/notification.yml 并填入真实值。notification.yml 已被 .gitignore 忽略。
+# ============================================================================
+
+notification:
+  providers:
+    # Bark 推送（iOS）：device_key 从 Bark App 获取
+    bark:
+    - name: bark1
+      enabled: false
+      device_key: ''
+      server_url: https://api.day.app
+    # Telegram Bot：bot_token 从 @BotFather 获取，chat_id 为目标会话 id
+    telegram:
+    - name: tg1
+      enabled: false
+      bot_token: ''
+      chat_id: ''
+  # 事件 → provider 名称列表的路由
+  routing:
+    transfer:
+    - tg1
+    organize:
+    - bark1
+  # 可选 Webhook 通知
+  webhook:
+    enabled: false
+    retry_count: 3
+    timeout: 10
+    token: ''
+    url: ''
