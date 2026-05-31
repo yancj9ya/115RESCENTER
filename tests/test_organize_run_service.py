@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 
 from src.organizing import MEDIA_KIND_MOVIE, MEDIA_KIND_SERIES, OrganizeMetadata, OrganizeRule
+from src.organizing.ai_filename_parser import AiFilenameParseResult
 from src.organizing.repository import (
     FAILED,
     PARTIAL_SUCCESS,
@@ -16,6 +17,16 @@ from src.organizing.repository import (
     OrganizeRepository,
 )
 from src.processors.organize_run import OrganizeRunService
+
+
+class FakeAiFilenameParser:
+    def __init__(self, result: object | None) -> None:
+        self.result = result
+        self.calls: list[str] = []
+
+    def parse(self, filename: str) -> object | None:
+        self.calls.append(filename)
+        return self.result
 
 
 class FakeStorage:
@@ -73,13 +84,14 @@ class OrganizeRunServiceTest(unittest.TestCase):
     def setUp(self) -> None:
         self.rule = OrganizeRule(media_library_root_cid=100)
 
-    def _service(self, repo, storage, metadata_resolver):
+    def _service(self, repo, storage, metadata_resolver, **kwargs):
         return OrganizeRunService(
             repo,
             storage,
             self.rule,
             metadata_resolver=metadata_resolver,
             sleeper=lambda _seconds: None,
+            **kwargs,
         )
 
     def test_successful_run_records_planned_item_and_executes_storage_operations(self) -> None:
@@ -135,6 +147,81 @@ class OrganizeRunServiceTest(unittest.TestCase):
                     ("move_file", (11, 7001)),
                 ],
             )
+
+    def test_ai_fallback_retries_title_resolver_when_metadata_missing(self) -> None:
+        item = {"id": 11, "name": "主角.2026.S01E38.第38集.2160p.WEB-DL.DV.H.265-XH.mkv", "is_dir": False}
+        storage = FakeStorage([item], ensure_folder_result={"cid": 7001, "name": "主角（2026）"})
+        ai = FakeAiFilenameParser(AiFilenameParseResult(type="tv", title="主角", year=2026, season=1, episode=38))
+        title_calls: list[tuple[str, int | None]] = []
+
+        def title_resolver(title: str, year: int | None) -> OrganizeMetadata | None:
+            title_calls.append((title, year))
+            return OrganizeMetadata(title="主角", year=2026, kind=MEDIA_KIND_SERIES)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo = self._repo(tmp_dir)
+            service = self._service(
+                repo,
+                storage,
+                metadata_resolver=lambda _item: None,
+                ai_filename_parser=ai,
+                title_resolver=title_resolver,
+            )
+
+            result = service.run_once(9001)
+
+        self.assertEqual(result.status, SUCCESS)
+        self.assertEqual(ai.calls, [item["name"]])
+        self.assertEqual(title_calls, [("主角", 2026)])
+        self.assertIn(("rename_file", (11, "主角.2026.S01E38.第38集.2160p.HEVC.WEB-DL.mkv")), storage.calls)
+
+    def test_ai_fallback_retries_when_metadata_title_differs_too_much(self) -> None:
+        item = {"id": 11, "name": "主角.2026.S01E38.2160p.WEB-DL.H.265-XH.mkv", "is_dir": False}
+        storage = FakeStorage([item], ensure_folder_result={"cid": 7001, "name": "主角（2026）"})
+        ai = FakeAiFilenameParser(AiFilenameParseResult(type="tv", title="主角", year=2026, season=1, episode=38))
+        title_calls: list[tuple[str, int | None]] = []
+
+        def title_resolver(title: str, year: int | None) -> OrganizeMetadata | None:
+            title_calls.append((title, year))
+            return OrganizeMetadata(title="主角", year=2026, kind=MEDIA_KIND_SERIES)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo = self._repo(tmp_dir)
+            service = self._service(
+                repo,
+                storage,
+                metadata_resolver=lambda _item: OrganizeMetadata(title="王牌播音员", year=2004, kind=MEDIA_KIND_MOVIE),
+                ai_filename_parser=ai,
+                title_resolver=title_resolver,
+                title_similarity_threshold=0.7,
+            )
+
+            result = service.run_once(9001)
+
+        self.assertEqual(result.status, SUCCESS)
+        self.assertEqual(ai.calls, [item["name"]])
+        self.assertEqual(title_calls, [("主角", 2026)])
+        self.assertIn(("rename_file", (11, "主角.2026.S01E38.第38集.2160p.HEVC.WEB-DL.mkv")), storage.calls)
+
+    def test_ai_fallback_is_not_called_when_metadata_title_is_similar(self) -> None:
+        item = {"id": 11, "name": "主角.2026.S01E38.2160p.WEB-DL.H.265-XH.mkv", "is_dir": False}
+        storage = FakeStorage([item], ensure_folder_result={"cid": 7001, "name": "主角（2026）"})
+        ai = FakeAiFilenameParser(AiFilenameParseResult(type="tv", title="主角", year=2026, season=1, episode=38))
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo = self._repo(tmp_dir)
+            service = self._service(
+                repo,
+                storage,
+                metadata_resolver=lambda _item: OrganizeMetadata(title="主角", year=2026, kind=MEDIA_KIND_SERIES),
+                ai_filename_parser=ai,
+                title_resolver=lambda title, year: OrganizeMetadata(title=title, year=year, kind=MEDIA_KIND_SERIES),
+            )
+
+            result = service.run_once(9001)
+
+        self.assertEqual(result.status, SUCCESS)
+        self.assertEqual(ai.calls, [])
 
     def test_directories_become_skipped_dir_items(self) -> None:
         folder = {"id": 21, "name": "Already Organized", "is_dir": True}

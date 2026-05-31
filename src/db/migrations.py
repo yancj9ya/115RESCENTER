@@ -72,6 +72,8 @@ def _migration_v1(connection: sqlite3.Connection) -> None:
             updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             tmdb_id INTEGER,
             tmdb_kind TEXT,
+            year INTEGER,
+            require_year_match INTEGER NOT NULL DEFAULT 1,
             aliases_json TEXT,
             poster_path TEXT
         );
@@ -164,6 +166,8 @@ def _migration_v1(connection: sqlite3.Connection) -> None:
         (
             ("tmdb_id", "INTEGER"),
             ("tmdb_kind", "TEXT"),
+            ("year", "INTEGER"),
+            ("require_year_match", "INTEGER NOT NULL DEFAULT 1"),
             ("aliases_json", "TEXT"),
             ("poster_path", "TEXT"),
         ),
@@ -228,8 +232,19 @@ def _migration_v3(connection: sqlite3.Connection) -> None:
     )
 
 
+def _migration_v4(connection: sqlite3.Connection) -> None:
+    _backfill_columns(
+        connection,
+        "subscription_rules",
+        (
+            ("year", "INTEGER"),
+            ("require_year_match", "INTEGER NOT NULL DEFAULT 1"),
+        ),
+    )
+
+
 # 顺序即版本：索引 0 -> 升到 user_version 1，索引 1 -> 升到 2 ...
-_MIGRATIONS: tuple[Migration, ...] = (_migration_v1, _migration_v2, _migration_v3)
+_MIGRATIONS: tuple[Migration, ...] = (_migration_v1, _migration_v2, _migration_v3, _migration_v4)
 
 
 def migrate(db_path: str | Path) -> int:

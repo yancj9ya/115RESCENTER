@@ -28,6 +28,10 @@ class FakeP115FileSystem:
         self.calls.append(("move", {"id": file_id, "target_cid": target_cid}))
         return {"state": True}
 
+    def remove(self, file_id: int | str) -> dict[str, object]:
+        self.calls.append(("remove", file_id))
+        return {"state": True}
+
     def mkdir(self, parent_cid: int | str, name: str) -> dict[str, object]:
         self.calls.append(("mkdir", {"parent_cid": parent_cid, "name": name}))
         return {"id": "31", "name": name, "is_dir": True, "parent_id": parent_cid}
@@ -101,11 +105,12 @@ class Storage115ServiceCompatibilityTest(unittest.TestCase):
             ],
         )
 
-    def test_rename_move_and_mkdir_use_filesystem_methods(self) -> None:
+    def test_rename_move_delete_and_mkdir_use_filesystem_methods(self) -> None:
         service, fs, _ = self.make_service()
 
         service.rename_file(10, "New.mkv")
         service.move_file(10, 800)
+        service.delete_file(10)
         created = service.ensure_folder(900, "Created")
 
         self.assertEqual(
@@ -113,6 +118,7 @@ class Storage115ServiceCompatibilityTest(unittest.TestCase):
             [
                 ("rename", {"id": 10, "name": "New.mkv"}),
                 ("move", {"id": 10, "target_cid": 800}),
+                ("remove", 10),
                 ("readdir", 900),
                 ("mkdir", {"parent_cid": 900, "name": "Created"}),
             ],

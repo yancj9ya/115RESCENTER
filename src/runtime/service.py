@@ -18,7 +18,7 @@ from .models import (
 )
 from .repository import RuntimeControlRepository
 
-_RUNTIME_MESSAGE = "start/stop persists scheduler intent only; no background workers are spawned"
+_RUNTIME_MESSAGE = "runtime runs with the API process when the backend app is started"
 
 
 class RuntimeControlService:

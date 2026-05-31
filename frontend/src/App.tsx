@@ -3,13 +3,12 @@ import { LogCenterSummary, type LogCenterView } from './dashboard/LogCenterSumma
 import StatusOverview from './dashboard/StatusOverview'
 import { NetdiskSettings } from './netdisk/NetdiskSettings'
 import { NotificationSettings } from './notifications/NotificationSettings'
-import ResourceCenter from './resources/ResourceCenter'
+import ResourceCenter, { type ResourceCenterTabId } from './resources/ResourceCenter'
 import { SubscriptionCenter } from './subscriptions/SubscriptionCenter'
-import DryRun from './toolbox/DryRun'
-import TmdbSearch from './toolbox/TmdbSearch'
+import Toolbox, { type ToolboxTabId } from './toolbox/Toolbox'
 
 type PageId = 'status-overview' | 'resource-center' | 'subscription-center' | 'netdisk-settings' | 'log-center' | 'toolbox' | 'notification-settings'
-type SubViewId = 'telegram-web' | 'collect' | 'transfer' | 'organize' | 'system' | 'tmdb' | 'dry-run' | 'path-tools' | 'global-settings'
+type SubViewId = ResourceCenterTabId | ToolboxTabId | 'collect' | 'transfer' | 'organize' | 'system' | 'path-tools' | 'global-settings'
 
 type PageWidth = 'standard' | 'wide' | 'full'
 
@@ -42,7 +41,7 @@ const shell = {
 
 const pages: Record<PageId, PageConfig> = {
   'status-overview': { id: 'status-overview', title: '状态总览', width: 'full' },
-  'resource-center': { id: 'resource-center', title: '资源中心', width: 'standard' },
+  'resource-center': { id: 'resource-center', title: '资源中心', width: 'wide' },
   'subscription-center': { id: 'subscription-center', title: '订阅中心', width: 'wide' },
   'netdisk-settings': { id: 'netdisk-settings', title: '网盘设置', width: 'standard' },
   'log-center': { id: 'log-center', title: '日志中心', width: 'full' },
@@ -66,15 +65,30 @@ const navGroups: { title: string; items: NavItem[] }[] = [
   {
     title: '快速入口',
     items: [
-      { icon: '📥', label: 'Telegram Web', pageId: 'resource-center', subViewId: 'telegram-web' },
+      { icon: '📥', label: 'telegram_web', pageId: 'resource-center', subViewId: 'telegram-web' },
+      { icon: 'TA', label: 'telegram_app', pageId: 'resource-center', subViewId: 'telegram-app' },
+      { icon: 'HD', label: 'hdhive', pageId: 'resource-center', subViewId: 'hdhive' },
+      { icon: 'P', label: 'panso', pageId: 'resource-center', subViewId: 'panso' },
       { icon: '🔁', label: '转存队列', pageId: 'log-center', subViewId: 'transfer' },
       { icon: '🗂️', label: '整理记录', pageId: 'log-center', subViewId: 'organize' },
       { icon: '🔎', label: 'TMDB 检索', pageId: 'toolbox', subViewId: 'tmdb' },
+      { icon: 'AI', label: 'AI 识别', pageId: 'toolbox', subViewId: 'ai-filename' },
       { icon: '⚙️', label: '全局设置', pageId: 'netdisk-settings', subViewId: 'global-settings' },
       { icon: '🧪', label: '干运行测试', pageId: 'toolbox', subViewId: 'dry-run' },
     ],
   },
 ]
+
+const resourceCenterTabs: ResourceCenterTabId[] = ['telegram-web', 'telegram-app', 'hdhive', 'panso']
+const toolboxTabs: ToolboxTabId[] = ['tmdb', 'ai-filename', 'dry-run']
+
+function toResourceCenterTab(subViewId?: SubViewId): ResourceCenterTabId {
+  return resourceCenterTabs.includes(subViewId as ResourceCenterTabId) ? subViewId as ResourceCenterTabId : 'telegram-web'
+}
+
+function toToolboxTab(subViewId?: SubViewId): ToolboxTabId {
+  return toolboxTabs.includes(subViewId as ToolboxTabId) ? subViewId as ToolboxTabId : 'tmdb'
+}
 
 function toLogView(subViewId?: SubViewId): LogCenterView {
   if (subViewId === 'transfer' || subViewId === 'organize' || subViewId === 'collect') {
@@ -83,13 +97,13 @@ function toLogView(subViewId?: SubViewId): LogCenterView {
   return 'system'
 }
 
-function renderPageContent(pageId: PageId, subViewId?: SubViewId) {
+function renderPageContent(pageId: PageId, subViewId: SubViewId | undefined, setRoute: (pageId: PageId, subViewId?: SubViewId) => void) {
   if (pageId === 'status-overview') {
     return <StatusOverview />
   }
 
   if (pageId === 'resource-center') {
-    return <ResourceCenter />
+    return <ResourceCenter activeTab={toResourceCenterTab(subViewId)} onTabChange={(tabId) => setRoute('resource-center', tabId)} />
   }
 
   if (pageId === 'subscription-center') {
@@ -105,8 +119,7 @@ function renderPageContent(pageId: PageId, subViewId?: SubViewId) {
   }
 
   if (pageId === 'toolbox') {
-    if (subViewId === 'dry-run') return <DryRun />
-    return <TmdbSearch />
+    return <Toolbox activeTab={toToolboxTab(subViewId)} onTabChange={(tabId) => setRoute('toolbox', tabId)} />
   }
 
   if (pageId === 'notification-settings') {
@@ -156,6 +169,7 @@ function App() {
 
   const activePage = pages[activeTarget.pageId]
   const activeNavLabel = useMemo(() => activePage.title, [activePage.title])
+  const setRoute = (pageId: PageId, subViewId?: SubViewId) => setActiveTarget({ pageId, subViewId })
 
   return (
     <div className={shell.page}>
@@ -184,7 +198,7 @@ function App() {
                       key={`${group.title}-${item.label}`}
                       type="button"
                       aria-current={isActive ? 'page' : undefined}
-                      onClick={() => setActiveTarget({ pageId: item.pageId, subViewId: item.subViewId })}
+                      onClick={() => setRoute(item.pageId, item.subViewId)}
                       className={`${shell.focus} flex min-h-9 w-full items-center justify-between rounded-[0.5rem] px-2.5 text-left text-[0.78rem] font-bold transition duration-150 ${
                         isActive
                           ? 'bg-[#122743] text-white shadow-[inset_0.1875rem_0_0_#3a8bff]'
@@ -224,7 +238,7 @@ function App() {
             )}
 
             <div className="min-h-[24rem]">
-              {renderPageContent(activeTarget.pageId, activeTarget.subViewId)}
+              {renderPageContent(activeTarget.pageId, activeTarget.subViewId, setRoute)}
             </div>
           </section>
         </div>

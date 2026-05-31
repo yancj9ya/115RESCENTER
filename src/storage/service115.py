@@ -111,7 +111,7 @@ class Storage115Service:
         return self.fs.move(file_id, target_cid)
 
     def delete_file(self, file_id: int | str) -> Any:
-        return self.fs.delete(file_id)
+        return self.fs.remove(file_id)
 
     def ensure_folder(self, parent_cid: int | str, name: str) -> Storage115Item:
         if not name.strip():

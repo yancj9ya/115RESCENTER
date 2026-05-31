@@ -41,7 +41,7 @@ class RuntimeControlServiceTest(unittest.TestCase):
         self.assertTrue(status.control_plane_only)
         self.assertIsNone(status.started_at)
         self.assertIsNotNone(status.stopped_at)
-        self.assertIn("scheduler intent", status.message)
+        self.assertIn("API process", status.message)
 
     def test_start_and_stop_are_idempotent_and_persisted(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

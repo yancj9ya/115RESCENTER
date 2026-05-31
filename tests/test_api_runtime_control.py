@@ -3,6 +3,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
@@ -188,6 +189,51 @@ class FastApiRuntimeControlTest(RuntimeApiTestCase):
         self.assertNotIn("super-secret-cookie", body)
         self.assertNotIn("super-secret-token", body)
         self.assertNotIn("secret-cache", body)
+
+    def test_create_app_defaults_to_not_starting_embedded_runtime(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir, \
+             patch("src.api.app.Thread") as thread_cls:
+            api_app = create_app(db_path=Path(tmp_dir) / "api.db", settings=AppSettings())
+            with TestClient(api_app):
+                pass
+
+        thread_cls.assert_not_called()
+
+    def test_create_app_can_start_embedded_runtime_with_lifespan(self) -> None:
+        if create_app is None:
+            raise unittest.SkipTest(f"src.api.app.create_app is not implemented yet: {CREATE_APP_IMPORT_ERROR}")
+
+        class FakeThread:
+            def __init__(self, *, target, args, name, daemon):
+                self.target = target
+                self.args = args
+                self.name = name
+                self.daemon = daemon
+                self.started = False
+                self.join_timeout = None
+
+            def start(self):
+                self.started = True
+
+            def join(self, timeout=None):
+                self.join_timeout = timeout
+
+        created_threads: list[FakeThread] = []
+
+        def thread_factory(*, target, args, name, daemon):
+            thread = FakeThread(target=target, args=args, name=name, daemon=daemon)
+            created_threads.append(thread)
+            return thread
+
+        with tempfile.TemporaryDirectory() as tmp_dir, \
+             patch("src.api.app.Thread", side_effect=thread_factory):
+            api_app = create_app(db_path=Path(tmp_dir) / "api.db", settings=AppSettings(), start_runtime=True)
+            with TestClient(api_app):
+                self.assertEqual(len(created_threads), 1)
+                self.assertTrue(created_threads[0].started)
+                self.assertEqual(created_threads[0].name, "api-runtime-worker")
+
+            self.assertEqual(created_threads[0].join_timeout, 5)
 
 
 if __name__ == "__main__":

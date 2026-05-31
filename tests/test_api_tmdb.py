@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from src.config.settings import AppSettings
 from src.organizing import MEDIA_KIND_MOVIE, MEDIA_KIND_SERIES, OrganizeMetadata, TmdbConfig, TmdbCredentialError, TmdbRetryableError
+from src.organizing.ai_filename_parser import AiFilenameParseResult
 from src.organizing.tmdb import TmdbError
 
 try:
@@ -37,6 +38,131 @@ class FakeResolver:
         if self._error is not None:
             raise self._error
         return self._result
+
+
+class FastApiAiFilenameParseTest(unittest.TestCase):
+    def test_list_ai_models_returns_model_ids(self) -> None:
+        if create_app is None:
+            raise unittest.SkipTest(f"src.api.app.create_app is not implemented yet: {CREATE_APP_IMPORT_ERROR}")
+        api_app = create_app(settings=AppSettings())
+        client = TestClient(api_app)
+
+        class FakeResponse:
+            status_code = 200
+
+            def raise_for_status(self) -> None:
+                return None
+
+            def json(self) -> dict:
+                return {"data": [{"id": "z-model"}, {"id": "a-model"}, {"object": "model"}]}
+
+        from src.api import routes
+
+        original_get = routes.httpx.get if hasattr(routes, "httpx") else None
+        calls = []
+
+        def fake_get(url, *, headers, timeout):
+            calls.append((url, headers, timeout))
+            return FakeResponse()
+
+        import httpx
+
+        original_httpx_get = httpx.get
+        httpx.get = fake_get
+        self.addCleanup(lambda: setattr(httpx, "get", original_httpx_get))
+        if original_get is not None:
+            self.addCleanup(lambda: setattr(routes.httpx, "get", original_get))
+
+        response = client.post(
+            "/ai/models",
+            json={
+                "provider": "openai_compatible",
+                "api_key": "secret-key",
+                "base_url": "https://api.example.test/v1",
+                "timeout_seconds": 9,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"models": ["a-model", "z-model"]})
+        self.assertEqual(calls[0][0], "https://api.example.test/v1/models")
+        self.assertEqual(calls[0][1]["Authorization"], "Bearer secret-key")
+        self.assertEqual(calls[0][2], 9)
+        self.assertNotIn("secret-key", response.text)
+
+    def test_list_ai_models_rejects_missing_config_without_leaking_secret(self) -> None:
+        if create_app is None:
+            raise unittest.SkipTest(f"src.api.app.create_app is not implemented yet: {CREATE_APP_IMPORT_ERROR}")
+        client = TestClient(create_app(settings=AppSettings()))
+
+        response = client.post(
+            "/ai/models",
+            json={"provider": "openai_compatible", "api_key": "", "base_url": ""},
+        )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertNotIn("secret", response.text)
+
+    def test_parse_ai_filename_returns_result(self) -> None:
+        if create_app is None:
+            raise unittest.SkipTest(f"src.api.app.create_app is not implemented yet: {CREATE_APP_IMPORT_ERROR}")
+        api_app = create_app(settings=AppSettings())
+        self.addCleanup(api_app.dependency_overrides.clear)
+
+        from src.api import routes
+
+        original_builder = routes.build_ai_filename_parser
+
+        class FakeParser:
+            def parse(self, filename: str):
+                self.filename = filename
+                return AiFilenameParseResult(type="tv", title="主角", year=2026, season=1, episode=38)
+
+        routes.build_ai_filename_parser = lambda _config: FakeParser()
+        self.addCleanup(lambda: setattr(routes, "build_ai_filename_parser", original_builder))
+        client = TestClient(api_app)
+
+        response = client.post(
+            "/ai/filename/parse",
+            json={
+                "filename": "主角.2026.S01E38.mkv",
+                "enabled": True,
+                "provider": "openai_compatible",
+                "api_key": "secret-key",
+                "base_url": "https://api.example.test/v1",
+                "model": "parser-model",
+                "timeout_seconds": 10,
+                "title_similarity_threshold": 0.55,
+                "prompt": "",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["filename"], "主角.2026.S01E38.mkv")
+        self.assertEqual(payload["result"]["title"], "主角")
+        self.assertEqual(payload["result"]["episode"], 38)
+        self.assertNotIn("secret-key", response.text)
+
+    def test_parse_ai_filename_rejects_missing_config(self) -> None:
+        if create_app is None:
+            raise unittest.SkipTest(f"src.api.app.create_app is not implemented yet: {CREATE_APP_IMPORT_ERROR}")
+        client = TestClient(create_app(settings=AppSettings()))
+
+        response = client.post(
+            "/ai/filename/parse",
+            json={
+                "filename": "a.mkv",
+                "enabled": True,
+                "provider": "openai_compatible",
+                "api_key": "",
+                "base_url": "",
+                "model": "",
+            },
+        )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertNotIn("secret", response.text)
 
 
 class FastApiTmdbMovieSearchTest(unittest.TestCase):

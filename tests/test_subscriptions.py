@@ -131,6 +131,22 @@ class SubscriptionMatcherTest(unittest.TestCase):
 
         self.assertEqual([match.rule_id for match in matches], ["rule-episode", "rule-1080p"])
         self.assertEqual([match.share for match in matches], [share, share])
+    def test_logs_searchable_text_preview_for_debugging(self) -> None:
+        share = CollectedShare(
+            share_code="abc123",
+            receive_code="xy9z",
+            share_url="https://115.com/s/abc123?password=xy9z",
+            source_type="telegram_web",
+            source_id="movie_channel",
+            message_id="101",
+            message_text="Movie night\nwith newline",
+        )
+
+        with self.assertLogs("src.subscriptions.matcher", level="DEBUG") as captured:
+            SubscriptionMatcher([]).match_share(share)
+
+        logs = "\n".join(captured.output)
+        self.assertIn("待匹配内容: Movie night with newline https://115.com/s/abc123?password=xy9z", logs)
 
 
 class SubscriptionMatcherTmdbAndAliasTest(unittest.TestCase):
@@ -195,6 +211,44 @@ class SubscriptionMatcherTmdbAndAliasTest(unittest.TestCase):
 
         self.assertEqual(len(matches), 1)
         self.assertEqual(matches[0].matched_keywords, [r"S\d{2}E\d{2}"])
+
+    def test_requires_matching_year_when_enabled(self) -> None:
+        share = self._share(text="新版电影 2024 2160p")
+        rule = SubscriptionRule(
+            id="rule-year",
+            name="新版电影",
+            aliases=("新版电影",),
+            year=2023,
+        )
+
+        self.assertEqual(SubscriptionMatcher([rule]).match_share(share), [])
+
+    def test_matches_when_required_year_is_present(self) -> None:
+        share = self._share(text="新版电影（2024）2160p")
+        rule = SubscriptionRule(
+            id="rule-year",
+            name="新版电影",
+            aliases=("新版电影",),
+            year=2024,
+        )
+
+        matches = SubscriptionMatcher([rule]).match_share(share)
+
+        self.assertEqual([match.rule_id for match in matches], ["rule-year"])
+
+    def test_year_check_can_be_disabled(self) -> None:
+        share = self._share(text="新版电影 2024 2160p")
+        rule = SubscriptionRule(
+            id="rule-year-optional",
+            name="新版电影",
+            aliases=("新版电影",),
+            year=2023,
+            require_year_match=False,
+        )
+
+        matches = SubscriptionMatcher([rule]).match_share(share)
+
+        self.assertEqual([match.rule_id for match in matches], ["rule-year-optional"])
 
     def test_multiple_signals_in_one_rule_report_all_hits_in_priority_order(self) -> None:
         share = self._share(text="三体 108545 1080p")

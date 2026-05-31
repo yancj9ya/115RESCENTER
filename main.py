@@ -544,8 +544,13 @@ def _run_runtime_worker(args: argparse.Namespace) -> None:
     factory = _runtime_factory_from_args(args)
     runtime = EventDrivenRuntime(factory=factory)
     settings = getattr(factory, "settings", None)
-    if settings is not None and hasattr(settings, "rank_refresh_interval_seconds"):
-        runtime._rank_refresh_interval_seconds = settings.rank_refresh_interval_seconds
+    if settings is not None:
+        if hasattr(settings, "runtime_interval_seconds"):
+            runtime._interval_seconds = settings.runtime_interval_seconds
+        if hasattr(settings, "runtime_sweep_interval_seconds"):
+            runtime._sweep_interval_seconds = settings.runtime_sweep_interval_seconds
+        if hasattr(settings, "rank_refresh_interval_seconds"):
+            runtime._rank_refresh_interval_seconds = settings.rank_refresh_interval_seconds
     if args.tick_seconds is not None:
         runtime._interval_seconds = args.tick_seconds
     if args.sweep_seconds is not None:

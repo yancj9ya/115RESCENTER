@@ -152,10 +152,16 @@ function collectStatusStyle(status: string) {
   return COLLECT_STATUS_STYLE[status] ?? { label: status, cls: 'border-[#3a4a6a] bg-[#16223a] text-[#9aa9c3]' }
 }
 
-function formatDateTime(iso: string): string {
-  if (!iso) return '-'
-  const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) return iso
+function parseUtcDateTime(value: string): Date {
+  const normalized = value.includes('T') ? value : value.replace(' ', 'T')
+  const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/.test(normalized)
+  return new Date(hasTimezone ? normalized : `${normalized}Z`)
+}
+
+function formatDateTime(value: string): string {
+  if (!value) return '-'
+  const date = parseUtcDateTime(value)
+  if (Number.isNaN(date.getTime())) return value
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
 }

@@ -2,6 +2,13 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import type { TelegramWebChannel, TelegramWebChannelStatusResponse } from '../types'
 import { useTelegramWebChannels } from './useTelegramWebChannels'
 
+export type ResourceCenterTabId = 'telegram-web' | 'telegram-app' | 'hdhive' | 'panso'
+
+type ResourceCenterProps = {
+  activeTab: ResourceCenterTabId
+  onTabChange: (tabId: ResourceCenterTabId) => void
+}
+
 type ChannelFormState = {
   original_channel: string | null
   channel: string
@@ -9,6 +16,45 @@ type ChannelFormState = {
   enabled: boolean
   poll_interval_seconds: string
 }
+
+type ResourceTab = {
+  id: ResourceCenterTabId
+  label: string
+  title: string
+  description: string
+  status: string
+}
+
+const resourceTabs: ResourceTab[] = [
+  {
+    id: 'telegram-web',
+    label: 'telegram_web',
+    title: 'Telegram Web 来源',
+    description: '维护公开 t.me/s 频道采集器，用于 NDRA 资源接入。',
+    status: '已接入',
+  },
+  {
+    id: 'telegram-app',
+    label: 'telegram_app',
+    title: 'Telegram App 来源',
+    description: '预留 Telegram 客户端采集渠道，后续可接入账号态或应用侧采集能力。',
+    status: '未实现',
+  },
+  {
+    id: 'hdhive',
+    label: 'hdhive',
+    title: 'HDHive 来源',
+    description: '预留 HDHive 资源渠道，用于后续扩展站点型资源接入。',
+    status: '未实现',
+  },
+  {
+    id: 'panso',
+    label: 'panso',
+    title: 'Panso 来源',
+    description: '预留 Panso 搜索渠道，用于后续扩展聚合搜索资源接入。',
+    status: '未实现',
+  },
+]
 
 const panelClass = 'rounded-[0.75rem] border border-[#1d2a46] bg-[#0a1424] p-4 shadow-[0_1rem_2.5rem_rgba(0,0,0,0.24)]'
 const surfaceClass = 'rounded-[0.625rem] border border-[#253552] bg-[#07111f]'
@@ -28,7 +74,48 @@ const emptyChannelForm: ChannelFormState = {
   poll_interval_seconds: '1800',
 }
 
-export function ResourceCenter() {
+export function ResourceCenter({ activeTab, onTabChange }: ResourceCenterProps) {
+  const activeResource = resourceTabs.find((tab) => tab.id === activeTab) ?? resourceTabs[0]
+
+  return (
+    <section className="grid gap-3" aria-labelledby="resource-center-title">
+      <div className="flex items-start justify-between gap-3 border-b border-[#1d2a46] pb-3 max-[42rem]:flex-col">
+        <div className="min-w-0">
+          <p className="m-0 text-[0.66rem] font-black uppercase tracking-[0.14em] text-[#53d3ff]">{activeResource.label}</p>
+          <h2 id="resource-center-title" className="mb-1 mt-1 text-[1.05rem] font-black text-white">资源中心</h2>
+          <p className="m-0 max-w-3xl text-[0.78rem] leading-5 text-[#91a0bb]">{activeResource.description}</p>
+        </div>
+        <span className={pillClass}>{activeResource.status}</span>
+      </div>
+
+      <div className="flex flex-wrap gap-2 border-b border-[#1d2a46] pb-3" role="tablist" aria-label="资源来源">
+        {resourceTabs.map((tab) => {
+          const selected = tab.id === activeTab
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={selected}
+              className={`${focusClass} min-h-9 rounded-[0.5rem] border px-3 text-[0.76rem] font-black transition ${
+                selected
+                  ? 'border-[#3a8bff] bg-[#122743] text-white shadow-[inset_0_0_0_0.0625rem_rgba(83,211,255,0.22)]'
+                  : 'border-[#253552] bg-[#07111f] text-[#9aa9c3] hover:border-[#3a8bff] hover:text-white'
+              }`}
+              onClick={() => onTabChange(tab.id)}
+            >
+              {tab.label}
+            </button>
+          )
+        })}
+      </div>
+
+      {activeTab === 'telegram-web' ? <TelegramWebResourcePanel /> : <ResourcePlaceholderPanel tab={activeResource} />}
+    </section>
+  )
+}
+
+function TelegramWebResourcePanel() {
   const {
     channels,
     loading,
@@ -81,7 +168,7 @@ export function ResourceCenter() {
       }
       setChannelForm(emptyChannelForm)
     } catch {
-      // The hook owns visible API error state.
+      return
     }
   }
 
@@ -92,7 +179,7 @@ export function ResourceCenter() {
         setChannelForm(emptyChannelForm)
       }
     } catch {
-      // The hook owns visible API error state.
+      return
     }
   }
 
@@ -100,7 +187,7 @@ export function ResourceCenter() {
     try {
       await setChannelEnabled(channel.channel, !channel.enabled)
     } catch {
-      // The hook owns visible API error state.
+      return
     }
   }
 
@@ -108,29 +195,28 @@ export function ResourceCenter() {
     try {
       await checkChannelStatus(channel.channel)
     } catch {
-      // The hook owns visible API error state.
+      return
     }
   }
 
   return (
-    <section className="grid gap-3" aria-labelledby="resource-center-title">
-      <div className="flex items-start justify-between gap-3 border-b border-[#1d2a46] pb-3 max-[42rem]:flex-col">
-        <div className="min-w-0">
-          <p className="m-0 text-[0.66rem] font-black uppercase tracking-[0.14em] text-[#53d3ff]">Telegram Web 来源</p>
-          <h2 id="resource-center-title" className="mb-1 mt-1 text-[1.05rem] font-black text-white">资源中心</h2>
-          <p className="m-0 max-w-2xl text-[0.78rem] leading-5 text-[#91a0bb]">维护公开 t.me/s 频道采集器，用于 NDRA 资源接入。</p>
-        </div>
-        <span className={pillClass}>{channels.length} 个频道</span>
-      </div>
-
+    <div className="grid gap-3">
       {combinedError && <StateNote tone="error" label={combinedError} />}
 
-      <div className="grid grid-cols-[minmax(0,1fr)_minmax(17rem,0.46fr)] gap-3 max-[58rem]:grid-cols-1">
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(20rem,0.38fr)] gap-3 max-[64rem]:grid-cols-1">
         <article className={panelClass} aria-label="Telegram web channel list">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <p className="m-0 text-[0.66rem] font-black uppercase tracking-[0.14em] text-[#71829f]">频道列表</p>
+              <h3 className="m-0 mt-1 text-[0.98rem] font-black text-white">telegram_web</h3>
+            </div>
+            <span className={pillClass}>{channels.length} 个频道</span>
+          </div>
+
           {loading && <StateNote label="加载 telegram_web 频道..." />}
           {!loading && channels.length === 0 && <StateNote label="暂无配置的 telegram_web 频道。" />}
           {!loading && channels.length > 0 && (
-            <div className="grid max-h-[32rem] gap-2 overflow-auto pr-1" role="list" aria-label="Telegram web channels">
+            <div className="grid max-h-[36rem] gap-2 overflow-auto pr-1" role="list" aria-label="Telegram web channels">
               {channels.map((channel) => (
                 <ChannelRow
                   key={channel.channel}
@@ -217,7 +303,22 @@ export function ResourceCenter() {
           </form>
         </article>
       </div>
-    </section>
+    </div>
+  )
+}
+
+function ResourcePlaceholderPanel({ tab }: { tab: ResourceTab }) {
+  return (
+    <article className={`${panelClass} min-h-[18rem]`} aria-labelledby={`${tab.id}-placeholder-title`}>
+      <div className="grid h-full min-h-[15rem] place-items-center rounded-[0.625rem] border border-dashed border-[#253552] bg-[#07111f] px-4 py-8 text-center">
+        <div className="max-w-[34rem]">
+          <p className="m-0 text-[0.66rem] font-black uppercase tracking-[0.14em] text-[#53d3ff]">{tab.label}</p>
+          <h3 id={`${tab.id}-placeholder-title`} className="mb-2 mt-2 text-[1rem] font-black text-white">{tab.title}</h3>
+          <p className="m-0 text-[0.8rem] font-semibold leading-6 text-[#91a0bb]">{tab.description}</p>
+          <p className="m-0 mt-3 text-[0.72rem] font-black uppercase tracking-[0.12em] text-[#71829f]">未实现</p>
+        </div>
+      </div>
+    </article>
   )
 }
 

@@ -167,6 +167,9 @@ class _TelegramPublicChannelParser(HTMLParser):
             self._in_text_depth += 1
             if tag in {"br", "p", "div"}:
                 self._append_text("\n")
+            href = attrs_dict.get("href")
+            if tag == "a" and href:
+                self._append_text(f" {href} ")
 
         if tag == "time":
             published_at = _parse_datetime(attrs_dict.get("datetime") or "")

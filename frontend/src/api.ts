@@ -1,5 +1,11 @@
 import type {
   DryRunBackendRequest,
+  AiFilenameParseRequest,
+  AiFilenameParseResponse,
+  AiModelListRequest,
+  AiModelListResponse,
+  AiSettingsResponse,
+  AiSettingsUpdateRequest,
   DryRunBackendSummary,
   ConnectivityResponse,
   HealthResponse,
@@ -413,6 +419,31 @@ export function getTmdbMovie(query: string, year?: number | null) {
   }
 
   return requestJson<TmdbMovieSearchResponse>(`/tmdb/search/movie?${params.toString()}`)
+}
+
+export function getAiSettings() {
+  return requestJson<AiSettingsResponse>('/ai/settings')
+}
+
+export function updateAiSettings(payload: AiSettingsUpdateRequest) {
+  return requestJson<AiSettingsResponse>('/ai/settings', {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function listAiModels(payload: AiModelListRequest) {
+  return requestJson<AiModelListResponse>('/ai/models', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function parseAiFilename(payload: AiFilenameParseRequest) {
+  return requestJson<AiFilenameParseResponse>('/ai/filename/parse', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
 }
 
 export function discoverTmdbSearch(query: string, limit = 10) {

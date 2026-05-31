@@ -534,6 +534,8 @@ class SubscriptionResponse(APIModel):
     updated_at: str
     tmdb_id: int | None = None
     tmdb_kind: Literal["movie", "tv"] | None = None
+    year: int | None = None
+    require_year_match: bool = True
     aliases: list[str] = []
     poster_path: str | None = None
 
@@ -548,6 +550,8 @@ class SubscriptionCreateRequest(APIModel):
     enabled: bool = True
     tmdb_id: int | None = Field(default=None, ge=1)
     tmdb_kind: Literal["movie", "tv"] | None = None
+    year: int | None = Field(default=None, ge=1900, le=2099)
+    require_year_match: bool = True
     aliases: list[str] = []
     poster_path: str | None = None
 
@@ -558,6 +562,8 @@ class SubscriptionUpdateRequest(APIModel):
     enabled: bool | None = None
     tmdb_id: int | None = Field(default=None, ge=1)
     tmdb_kind: Literal["movie", "tv"] | None = None
+    year: int | None = Field(default=None, ge=1900, le=2099)
+    require_year_match: bool | None = None
     aliases: list[str] | None = None
     poster_path: str | None = None
 
@@ -585,6 +591,70 @@ class SubscriptionProcessResponse(APIModel):
     created: int
     skipped: int
     errors: list[str]
+
+
+class AiModelListRequest(APIModel):
+    provider: str = "openai_compatible"
+    api_key: str = ""
+    base_url: str = ""
+    timeout_seconds: float = Field(default=30.0, ge=1.0)
+
+
+class AiModelListResponse(APIModel):
+    models: list[str]
+
+
+class AiSettingsResponse(APIModel):
+    enabled: bool
+    provider: str
+    base_url: str
+    model: str
+    timeout_seconds: float
+    title_similarity_threshold: float
+    prompt: str
+    has_api_key: bool
+
+
+class AiSettingsUpdateRequest(APIModel):
+    enabled: bool | None = None
+    provider: str | None = None
+    api_key: str | None = None
+    base_url: str | None = None
+    model: str | None = None
+    timeout_seconds: float | None = Field(default=None, ge=1.0)
+    title_similarity_threshold: float | None = Field(default=None, ge=0.0, le=1.0)
+    prompt: str | None = None
+
+
+class AiFilenameParseRequest(APIModel):
+    filename: str = Field(min_length=1)
+    enabled: bool = True
+    provider: str = "openai_compatible"
+    api_key: str = ""
+    base_url: str = ""
+    model: str = ""
+    timeout_seconds: float = Field(default=30.0, ge=1.0)
+    title_similarity_threshold: float = Field(default=0.55, ge=0.0, le=1.0)
+    prompt: str = ""
+
+
+class AiFilenameParseResultResponse(APIModel):
+    type: Literal["movie", "tv"] | None = None
+    title: str
+    original_title: str | None = None
+    year: int | None = None
+    season: int | None = None
+    episode: int | None = None
+    resolution: str | None = None
+    source: str | None = None
+    release_group: str | None = None
+    audio_codec: str | None = None
+    video_codec: str | None = None
+
+
+class AiFilenameParseResponse(APIModel):
+    filename: str
+    result: AiFilenameParseResultResponse | None = None
 
 
 class TmdbMetadataResponse(APIModel):

@@ -97,6 +97,8 @@ export type SubscriptionRule = {
   updated_at: string
   tmdb_id: number | null
   tmdb_kind: 'movie' | 'tv' | null
+  year: number | null
+  require_year_match: boolean
   aliases: string[]
   poster_path: string | null
 }
@@ -111,6 +113,8 @@ export type SubscriptionCreateRequest = {
   enabled: boolean
   tmdb_id?: number | null
   tmdb_kind?: 'movie' | 'tv' | null
+  year?: number | null
+  require_year_match?: boolean
   aliases?: string[]
   poster_path?: string | null
 }
@@ -121,6 +125,8 @@ export type SubscriptionUpdateRequest = {
   enabled?: boolean | null
   tmdb_id?: number | null
   tmdb_kind?: 'movie' | 'tv' | null
+  year?: number | null
+  require_year_match?: boolean | null
   aliases?: string[] | null
   poster_path?: string | null
 }
@@ -285,6 +291,70 @@ export type TmdbMovieSearchResponse = {
   query: string
   year: number | null
   metadata: TmdbMetadata | null
+}
+
+export type AiModelListRequest = {
+  provider: string
+  api_key: string
+  base_url: string
+  timeout_seconds: number
+}
+
+export type AiModelListResponse = {
+  models: string[]
+}
+
+export type AiSettingsResponse = {
+  enabled: boolean
+  provider: string
+  base_url: string
+  model: string
+  timeout_seconds: number
+  title_similarity_threshold: number
+  prompt: string
+  has_api_key: boolean
+}
+
+export type AiSettingsUpdateRequest = {
+  enabled?: boolean | null
+  provider?: string | null
+  api_key?: string | null
+  base_url?: string | null
+  model?: string | null
+  timeout_seconds?: number | null
+  title_similarity_threshold?: number | null
+  prompt?: string | null
+}
+
+export type AiFilenameParseRequest = {
+  filename: string
+  enabled: boolean
+  provider: string
+  api_key: string
+  base_url: string
+  model: string
+  timeout_seconds: number
+  title_similarity_threshold: number
+  prompt: string
+}
+
+export type AiFilenameParseResult = {
+  type: 'movie' | 'tv' | null
+  title: string
+  original_title: string | null
+  year: number | null
+  season: number | null
+  episode: number | null
+  resolution: string | null
+  source: string | null
+  release_group: string | null
+  audio_codec: string | null
+  video_codec: string | null
+}
+
+export type AiFilenameParseResponse = {
+  filename: string
+  result: AiFilenameParseResult | null
 }
 
 export type RuntimeDesiredState = 'running' | 'stopped'

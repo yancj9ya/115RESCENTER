@@ -148,6 +148,14 @@ class ExtractMediaTitleTest(unittest.TestCase):
         self.assertEqual(extract_media_title("大唐迷雾-S01E15.2160p.HDR10.HEVC.WEB-DL.mkv"), "大唐迷雾")
         self.assertEqual(extract_media_title("The Matrix (1999) 1080p BluRay x264.mkv"), "The Matrix")
 
+    def test_title_stops_before_season_episode_marker(self) -> None:
+        from src.organizing.filename_parser import extract_media_title
+
+        self.assertEqual(
+            extract_media_title("主角.2026.S01E38.第38集.2160p.WEB-DL.DV.H.265-XH.mkv"),
+            "主角",
+        )
+
     def test_strips_dovi_dolby_vision_shorthand(self) -> None:
         from src.organizing.filename_parser import extract_media_title
 

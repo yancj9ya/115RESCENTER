@@ -9,6 +9,7 @@ from typing import Any
 
 from src.config.settings import AppSettings
 from src.organizing import OrganizeMetadata, OrganizeRule, extract_media_title
+from src.organizing.ai_filename_parser import build_ai_filename_parser
 from src.organizing.repository import OrganizeRepository
 from src.queue.repository import QueueRepository
 from src.resources import TelegramWebChannelRepository, TelegramWebChannelService
@@ -153,6 +154,13 @@ class RuntimeFactory:
             rule=self.build_organize_rule(),
             metadata_resolver=self.build_metadata_resolver(),
             folder_resolver=self.build_folder_resolver(),
+            title_resolver=self.build_title_resolver(),
+            ai_filename_parser=build_ai_filename_parser(self.settings.ai_filename_parser),
+            title_similarity_threshold=(
+                self.settings.ai_filename_parser.title_similarity_threshold
+                if self.settings.ai_filename_parser is not None
+                else 0.55
+            ),
             sleeper=self.build_sleeper(),
             min_interval_seconds=self.settings.organize_min_interval_seconds,
         )
@@ -189,6 +197,22 @@ class RuntimeFactory:
             return self.resolver_builder()
         resolver = self._build_tmdb_resolver()
         return lambda item: resolver.resolve_multi(extract_media_title(str(getattr(item, "name", _item_name(item)))))
+
+    def build_title_resolver(self) -> Callable[[str, int | None], OrganizeMetadata | None] | None:
+        if self.settings.ai_filename_parser is None or not self.settings.ai_filename_parser.enabled:
+            return None
+        if self.resolver is not None or self.resolver_builder is not None:
+            return None
+        if self.settings.tmdb is None:
+            return None
+        resolver = self._build_tmdb_resolver()
+
+        def _resolve(title: str, year: int | None) -> OrganizeMetadata | None:
+            if not title.strip():
+                return None
+            return resolver.resolve_multi(title, year=year)
+
+        return _resolve
 
     def build_folder_resolver(
         self,

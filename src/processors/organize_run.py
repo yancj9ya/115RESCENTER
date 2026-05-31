@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import difflib
 import logging
+import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -14,6 +16,7 @@ from src.organizing import (
     is_season_folder_name,
     parse_folder_name,
 )
+from src.organizing.ai_filename_parser import AiFilenameParseResult, AiFilenameParser
 from src.organizing.repository import (
     FAILED,
     PARTIAL_SUCCESS,
@@ -61,6 +64,9 @@ class OrganizeRunService:
         metadata_resolver: Callable[[Any], OrganizeMetadata | None],
         *,
         folder_resolver: Callable[[str, int | None, int | None], OrganizeMetadata | None] | None = None,
+        title_resolver: Callable[[str, int | None], OrganizeMetadata | None] | None = None,
+        ai_filename_parser: AiFilenameParser | None = None,
+        title_similarity_threshold: float = 0.55,
         sleeper: Callable[[float], None] | None = None,
         min_interval_seconds: float = 0.5,
         max_depth: int = 10,
@@ -70,6 +76,9 @@ class OrganizeRunService:
         self._rule = rule
         self._metadata_resolver = metadata_resolver
         self._folder_resolver = folder_resolver
+        self._title_resolver = title_resolver
+        self._ai_filename_parser = ai_filename_parser
+        self._title_similarity_threshold = max(0.0, min(1.0, title_similarity_threshold))
         self._sleeper = sleeper or time.sleep
         self._min_interval_seconds = max(0.0, min_interval_seconds)
         self._max_depth = max_depth
@@ -220,9 +229,7 @@ class OrganizeRunService:
             extracted_title = extract_media_title(file_name)
             logger.debug(f"解析元数据: {file_name}")
             logger.info(f"提取媒体标题: '{file_name}' -> '{extracted_title}'")
-            metadata = self._metadata_resolver(item)
-            if metadata is None:
-                metadata = self._resolve_from_ancestors(ancestors, counters)
+            metadata = self._resolve_file_metadata(item, file_name, extracted_title, ancestors, counters)
             plan = build_organize_plan(item, metadata, self._rule)
             if plan is None:
                 logger.info(f"跳过未匹配文件: {file_name} (无元数据)")
@@ -328,6 +335,53 @@ class OrganizeRunService:
         if self._min_interval_seconds > 0:
             self._sleeper(self._min_interval_seconds)
 
+    def _resolve_file_metadata(
+        self,
+        item: Any,
+        file_name: str,
+        extracted_title: str,
+        ancestors: tuple[str, ...],
+        counters: _RunCounters,
+    ) -> OrganizeMetadata | None:
+        metadata = self._metadata_resolver(item)
+        if metadata is None:
+            metadata = self._resolve_from_ancestors(ancestors, counters)
+            if metadata is None:
+                return self._resolve_with_ai_filename(file_name, reason="tmdb missing")
+            return metadata
+        if self._metadata_title_differs(extracted_title, metadata):
+            ai_metadata = self._resolve_with_ai_filename(file_name, reason="title mismatch")
+            if ai_metadata is not None:
+                return ai_metadata
+        return metadata
+
+    def _resolve_with_ai_filename(self, file_name: str, *, reason: str) -> OrganizeMetadata | None:
+        if self._ai_filename_parser is None or self._title_resolver is None:
+            return None
+        parsed = self._ai_filename_parser.parse(file_name)
+        if parsed is None:
+            return None
+        logger.info(f"AI 文件名解析触发: {file_name}, reason={reason}, title='{parsed.title}', year={parsed.year}")
+        metadata = self._title_resolver(parsed.title, parsed.year)
+        if metadata is not None:
+            return _metadata_with_ai_episode(metadata, parsed)
+        return None
+
+    def _metadata_title_differs(self, extracted_title: str, metadata: OrganizeMetadata) -> bool:
+        left = _normalise_title_for_similarity(extracted_title)
+        right = _normalise_title_for_similarity(metadata.title)
+        if not left or not right:
+            return False
+        if left in right or right in left:
+            return False
+        ratio = difflib.SequenceMatcher(None, left, right).ratio()
+        if ratio < self._title_similarity_threshold:
+            logger.info(
+                f"标题差异过大，准备 AI 兜底: extracted='{extracted_title}', tmdb='{metadata.title}', similarity={ratio:.2f}"
+            )
+            return True
+        return False
+
     def _resolve_from_ancestors(
         self,
         ancestors: tuple[str, ...],
@@ -379,6 +433,30 @@ class OrganizeRunService:
             target_folder = self._storage.ensure_folder(current_parent_cid, folder_name)
             current_parent_cid = _get_item_cid(target_folder)
         return current_parent_cid
+
+
+def _metadata_with_ai_episode(metadata: OrganizeMetadata, parsed: AiFilenameParseResult) -> OrganizeMetadata:
+    if parsed.season is None and parsed.episode is None:
+        return metadata
+    return OrganizeMetadata(
+        title=metadata.title,
+        year=metadata.year,
+        kind=metadata.kind,
+        season=parsed.season if parsed.season is not None else metadata.season,
+        episode=parsed.episode if parsed.episode is not None else metadata.episode,
+        region_primary=metadata.region_primary,
+        region_candidates=metadata.region_candidates,
+        region_category=metadata.region_category,
+        region_source=metadata.region_source,
+        region_confidence=metadata.region_confidence,
+        tmdb_id=metadata.tmdb_id,
+        genre_ids=metadata.genre_ids,
+        category_hint=metadata.category_hint,
+    )
+
+
+def _normalise_title_for_similarity(value: str) -> str:
+    return re.sub(r"[\W_]+", "", value, flags=re.UNICODE).casefold()
 
 
 def _target_path(folder_segments: tuple[str, ...]) -> str | None:

@@ -9,6 +9,7 @@ from src.notifications import (
     TelegramBotNotifier,
     WebhookConfig,
 )
+from src.organizing.ai_filename_parser import AiFilenameParserConfig, DEFAULT_AI_FILENAME_PROMPT
 from src.organizing.tmdb import TmdbConfig
 from src.storage import Storage115Config
 
@@ -25,9 +26,12 @@ class AppSettings:
     tmdb: TmdbConfig | None = None
     notification_webhook: WebhookConfig | None = None
     notification_service: NotificationService | None = None
+    ai_filename_parser: AiFilenameParserConfig | None = None
     api_cors_origins: tuple[str, ...] = _DEFAULT_API_CORS_ORIGINS
     media_library_root_cid: int = 0
     organize_min_interval_seconds: float = 0.5
+    runtime_interval_seconds: int = 5
+    runtime_sweep_interval_seconds: int = 300
     rank_refresh_interval_seconds: int = 14400
 
     @classmethod
@@ -80,6 +84,18 @@ class AppSettings:
             if origin.strip()
         ) or _DEFAULT_API_CORS_ORIGINS
 
+        prompt = app_config.ai.filename_parser.prompt.strip() or DEFAULT_AI_FILENAME_PROMPT
+        ai_filename_parser = AiFilenameParserConfig(
+            enabled=app_config.ai.filename_parser.enabled,
+            provider=app_config.ai.filename_parser.provider,
+            api_key=app_config.ai.filename_parser.api_key,
+            base_url=app_config.ai.filename_parser.base_url,
+            model=app_config.ai.filename_parser.model,
+            timeout_seconds=app_config.ai.filename_parser.timeout_seconds,
+            title_similarity_threshold=app_config.ai.filename_parser.title_similarity_threshold,
+            prompt=prompt,
+        )
+
         transfer_cid = app_config.netdisk.transfer_cid or 0
         media_library_root_cid = app_config.organize.media_library_root_cid or 0
 
@@ -89,9 +105,12 @@ class AppSettings:
             tmdb=tmdb,
             notification_webhook=notification_webhook,
             notification_service=notification_service,
+            ai_filename_parser=ai_filename_parser,
             api_cors_origins=api_cors_origins,
             media_library_root_cid=media_library_root_cid,
             organize_min_interval_seconds=app_config.organize.min_interval_seconds,
+            runtime_interval_seconds=app_config.runtime.interval_seconds,
+            runtime_sweep_interval_seconds=app_config.runtime.telegram_collector.interval_seconds,
             rank_refresh_interval_seconds=app_config.runtime.rank_refresh_interval_seconds,
         )
 

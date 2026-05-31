@@ -104,6 +104,7 @@ export function SubscriptionCenter() {
   const [selected, setSelected] = useState<SelectedTmdb | null>(null)
   const [aliasDraft, setAliasDraft] = useState('')
   const [overrideName, setOverrideName] = useState('')
+  const [requireYearMatch, setRequireYearMatch] = useState(true)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [showEditModal, setShowEditModal] = useState(false)
 
@@ -126,7 +127,7 @@ export function SubscriptionCenter() {
         tmdb_id: current.tmdb_id,
         kind: current.tmdb_kind,
         title: current.name,
-        year: null,
+        year: current.year,
         aliases: current.aliases,
         poster_path: current.poster_path,
         vote_average: null,
@@ -136,6 +137,7 @@ export function SubscriptionCenter() {
       setSelected(null)
     }
     setOverrideName(current.name)
+    setRequireYearMatch(current.require_year_match)
   }, [editingId, rules])
 
   useEffect(() => {
@@ -224,6 +226,7 @@ export function SubscriptionCenter() {
         overview: item.overview || null,
       })
       setOverrideName(bundle.title || item.title)
+      setRequireYearMatch(true)
       setShowEditModal(true)
     } catch (caught) {
       setAliasError(errorMessage(caught))
@@ -251,6 +254,7 @@ export function SubscriptionCenter() {
   function resetEditor() {
     setSelected(null)
     setOverrideName('')
+    setRequireYearMatch(true)
     setEditingId(null)
     setAliasDraft('')
     setAliasError(null)
@@ -280,6 +284,8 @@ export function SubscriptionCenter() {
           enabled: true,
           tmdb_id: selected.tmdb_id,
           tmdb_kind: selected.kind,
+          year: selected.year,
+          require_year_match: requireYearMatch,
           aliases: selected.aliases,
           poster_path: selected.poster_path,
         })
@@ -290,6 +296,8 @@ export function SubscriptionCenter() {
             pattern: '',
             tmdb_id: selected.tmdb_id,
             tmdb_kind: selected.kind,
+            year: selected.year,
+            require_year_match: requireYearMatch,
             aliases: selected.aliases,
             poster_path: selected.poster_path,
           },
@@ -534,8 +542,10 @@ export function SubscriptionCenter() {
           aliasDraft={aliasDraft}
           aliasError={aliasError}
           aliasLoading={aliasLoading}
+          requireYearMatch={requireYearMatch}
           saveLoading={saveState.loading}
           onOverrideNameChange={setOverrideName}
+          onRequireYearMatchChange={setRequireYearMatch}
           onAliasDraftChange={setAliasDraft}
           onAddAlias={handleAddAlias}
           onRemoveAlias={handleRemoveAlias}
@@ -607,18 +617,28 @@ function SubscriptionRuleCard({
           {rule.tmdb_id !== null ? ` · TMDB #${rule.tmdb_id}` : ''}
         </p>
 
+        <div className="mb-2 flex flex-wrap gap-1">
+          <span className="inline-flex items-center rounded-[0.375rem] border border-[#253552] bg-[#0d1b2e] px-1.5 py-0.5 text-[0.7rem] text-[#9aa9c3]">
+            年份 {rule.year ?? '未设置'}
+          </span>
+          <span className="inline-flex items-center rounded-[0.375rem] border border-[#253552] bg-[#0d1b2e] px-1.5 py-0.5 text-[0.7rem] text-[#9aa9c3]">
+            {rule.require_year_match ? '强制年份' : '年份可选'}
+          </span>
+        </div>
+
         {rule.aliases.length > 0 && (
-          <div className="mb-2 flex flex-wrap gap-1" aria-label="别名">
+          <div className="mb-2 flex min-w-0 max-w-full flex-nowrap gap-1 overflow-hidden" aria-label="别名">
             {rule.aliases.slice(0, 3).map((alias) => (
               <span
                 key={alias}
-                className="inline-flex items-center rounded-[0.375rem] border border-[#253552] bg-[#0d1b2e] px-1.5 py-0.5 text-[0.7rem] text-[#9aa9c3]"
+                title={alias}
+                className="inline-flex min-w-0 max-w-[8.5rem] shrink items-center truncate rounded-[0.375rem] border border-[#253552] bg-[#0d1b2e] px-1.5 py-0.5 text-[0.7rem] text-[#9aa9c3]"
               >
                 {alias}
               </span>
             ))}
             {rule.aliases.length > 3 && (
-              <span className="inline-flex items-center rounded-[0.375rem] border border-[#253552] bg-[#0d1b2e] px-1.5 py-0.5 text-[0.7rem] text-[#667793]">
+              <span className="inline-flex shrink-0 items-center rounded-[0.375rem] border border-[#253552] bg-[#0d1b2e] px-1.5 py-0.5 text-[0.7rem] text-[#667793]">
                 +{rule.aliases.length - 3}
               </span>
             )}
@@ -697,8 +717,10 @@ function EditModal({
   aliasDraft,
   aliasError,
   aliasLoading,
+  requireYearMatch,
   saveLoading,
   onOverrideNameChange,
+  onRequireYearMatchChange,
   onAliasDraftChange,
   onAddAlias,
   onRemoveAlias,
@@ -711,8 +733,10 @@ function EditModal({
   aliasDraft: string
   aliasError: string | null
   aliasLoading: boolean
+  requireYearMatch: boolean
   saveLoading: boolean
   onOverrideNameChange: (value: string) => void
+  onRequireYearMatchChange: (value: boolean) => void
   onAliasDraftChange: (value: string) => void
   onAddAlias: () => void
   onRemoveAlias: (alias: string) => void
@@ -789,6 +813,16 @@ function EditModal({
               value={overrideName}
               onChange={(event) => onOverrideNameChange(event.target.value)}
               required
+            />
+          </label>
+
+          <label className="flex items-center justify-between gap-3 rounded-[0.5rem] border border-[#1d2a46] bg-[#07111f] px-3 py-2.5 text-[0.82rem] font-bold text-[#dbe7ff]">
+            <span>强制年份匹配</span>
+            <input
+              type="checkbox"
+              checked={requireYearMatch}
+              onChange={(event) => onRequireYearMatchChange(event.target.checked)}
+              className="h-4 w-4 accent-[#3a8bff]"
             />
           </label>
 

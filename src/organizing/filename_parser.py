@@ -199,6 +199,10 @@ def extract_media_title(filename: str) -> str:
     if ' - ' in stem:
         stem = stem.split(' - ')[0]
 
+    episode_start = _first_episode_marker_start(stem)
+    if episode_start is not None:
+        stem = stem[:episode_start]
+
     # 移除剧集信息
     for pattern in _EPISODE_PATTERNS:
         stem = pattern.sub('', stem)
@@ -270,6 +274,11 @@ def extract_media_title(filename: str) -> str:
     stem = stem.strip()
 
     return stem
+
+
+def _first_episode_marker_start(stem: str) -> int | None:
+    starts = [match.start() for pattern in _EPISODE_PATTERNS if (match := pattern.search(stem))]
+    return min(starts) if starts else None
 
 
 def _split_extension(name: str) -> tuple[str, str]:

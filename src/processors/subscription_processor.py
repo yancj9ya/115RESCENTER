@@ -134,6 +134,8 @@ class SubscriptionProcessor:
                 pattern=record.pattern,
                 enabled=record.enabled,
                 tmdb_id=record.tmdb_id,
+                year=record.year,
+                require_year_match=record.require_year_match,
                 aliases=record.aliases,
             )
             for record in self._subscription_repository.list_rules()

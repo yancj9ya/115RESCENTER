@@ -24,6 +24,8 @@ class SubscriptionRuleRecord:
     updated_at: str
     tmdb_id: int | None = None
     tmdb_kind: str | None = None
+    year: int | None = None
+    require_year_match: bool = True
     aliases: tuple[str, ...] = field(default_factory=tuple)
     poster_path: str | None = None
 
@@ -45,14 +47,16 @@ class SubscriptionRepository:
         tmdb_kind: str | None = None,
         aliases: tuple[str, ...] | list[str] | None = None,
         poster_path: str | None = None,
+        year: int | None = None,
+        require_year_match: bool = True,
     ) -> SubscriptionRuleRecord:
         aliases_json = _aliases_to_json(aliases)
         connection = connect(self._db_path)
         try:
             cursor = connection.execute(
                 """
-                INSERT INTO subscription_rules (name, pattern, enabled, tmdb_id, tmdb_kind, aliases_json, poster_path)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO subscription_rules (name, pattern, enabled, tmdb_id, tmdb_kind, year, require_year_match, aliases_json, poster_path)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     name,
@@ -60,6 +64,8 @@ class SubscriptionRepository:
                     self._enabled_to_int(enabled),
                     tmdb_id,
                     tmdb_kind,
+                    year,
+                    self._enabled_to_int(require_year_match),
                     aliases_json,
                     poster_path,
                 ),
@@ -99,6 +105,8 @@ class SubscriptionRepository:
         tmdb_kind: str | None | _Unset = _UNSET,
         aliases: tuple[str, ...] | list[str] | None | _Unset = _UNSET,
         poster_path: str | None | _Unset = _UNSET,
+        year: int | None | _Unset = _UNSET,
+        require_year_match: bool | None = None,
     ) -> SubscriptionRuleRecord | None:
         current = self.get_rule(rule_id)
         if current is None:
@@ -109,6 +117,8 @@ class SubscriptionRepository:
         next_enabled = current.enabled if enabled is None else enabled
         next_tmdb_id = current.tmdb_id if isinstance(tmdb_id, _Unset) else tmdb_id
         next_tmdb_kind = current.tmdb_kind if isinstance(tmdb_kind, _Unset) else tmdb_kind
+        next_year = current.year if isinstance(year, _Unset) else year
+        next_require_year_match = current.require_year_match if require_year_match is None else require_year_match
         next_poster_path = current.poster_path if isinstance(poster_path, _Unset) else poster_path
         if isinstance(aliases, _Unset):
             next_aliases_json = _aliases_to_json(current.aliases)
@@ -125,6 +135,8 @@ class SubscriptionRepository:
                     enabled = ?,
                     tmdb_id = ?,
                     tmdb_kind = ?,
+                    year = ?,
+                    require_year_match = ?,
                     aliases_json = ?,
                     poster_path = ?,
                     updated_at = CURRENT_TIMESTAMP
@@ -136,6 +148,8 @@ class SubscriptionRepository:
                     self._enabled_to_int(next_enabled),
                     next_tmdb_id,
                     next_tmdb_kind,
+                    next_year,
+                    self._enabled_to_int(next_require_year_match),
                     next_aliases_json,
                     next_poster_path,
                     rule_id,
@@ -169,8 +183,10 @@ class SubscriptionRepository:
             updated_at=row[5],
             tmdb_id=row[6] if row[6] is not None else None,
             tmdb_kind=row[7] if row[7] is not None else None,
-            aliases=_aliases_from_json(row[8]),
-            poster_path=row[9] if row[9] is not None else None,
+            year=row[8] if row[8] is not None else None,
+            require_year_match=bool(row[9]),
+            aliases=_aliases_from_json(row[10]),
+            poster_path=row[11] if row[11] is not None else None,
         )
 
     def _enabled_to_int(self, enabled: bool) -> int:
@@ -179,7 +195,7 @@ class SubscriptionRepository:
 
 _SELECT_SQL = (
     "SELECT id, name, pattern, enabled, created_at, updated_at,"
-    " tmdb_id, tmdb_kind, aliases_json, poster_path FROM subscription_rules"
+    " tmdb_id, tmdb_kind, year, require_year_match, aliases_json, poster_path FROM subscription_rules"
 )
 
 

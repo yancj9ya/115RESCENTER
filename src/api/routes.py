@@ -64,6 +64,13 @@ from src.api.schemas import (
     NotificationProvidersResponse,
     NotificationProvidersUpdateRequest,
     NotificationTestResponse,
+    AiFilenameParseRequest,
+    AiFilenameParseResponse,
+    AiFilenameParseResultResponse,
+    AiModelListRequest,
+    AiModelListResponse,
+    AiSettingsResponse,
+    AiSettingsUpdateRequest,
     BarkProviderResponse,
     TelegramProviderResponse,
     OrganizeRunDetailResponse,
@@ -123,6 +130,7 @@ from src.collectors.telegram_web import TelegramWebMessage, parse_telegram_publi
 from src.config.settings import AppSettings
 from src.config.yaml_writer import update_yaml_values
 from src.notifications import InMemoryNotifier
+from src.organizing.ai_filename_parser import AiFilenameParserConfig, DEFAULT_AI_FILENAME_PROMPT, build_ai_filename_parser
 from src.organizing import (
     TmdbCredentialError,
     TmdbDiscoveryService,
@@ -447,6 +455,8 @@ def create_subscription(
             tmdb_kind=request.tmdb_kind,
             aliases=tuple(request.aliases),
             poster_path=request.poster_path,
+            year=request.year,
+            require_year_match=request.require_year_match,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -484,6 +494,10 @@ def update_subscription(
         update_fields["aliases"] = tuple(request.aliases)
     if "poster_path" in payload:
         update_fields["poster_path"] = request.poster_path
+    if "year" in payload:
+        update_fields["year"] = request.year
+    if "require_year_match" in payload:
+        update_fields["require_year_match"] = request.require_year_match
     try:
         rule = service.update_rule(rule_id, **update_fields)
     except ValueError as exc:
@@ -1032,6 +1046,107 @@ def test_notification_provider(name: str, fastapi_request: Request) -> Notificat
         return NotificationTestResponse(ok=False, error=str(exc))
 
 
+@router.get("/ai/settings", response_model=AiSettingsResponse)
+def get_ai_settings(settings: AppSettings = Depends(get_app_settings)) -> AiSettingsResponse:
+    return _ai_settings_to_api(settings.ai_filename_parser)
+
+
+@router.patch("/ai/settings", response_model=AiSettingsResponse)
+def update_ai_settings(request: AiSettingsUpdateRequest, fastapi_request: Request) -> AiSettingsResponse:
+    current = fastapi_request.app.state.settings.ai_filename_parser or AiFilenameParserConfig()
+    payload = request.model_dump(exclude_unset=True)
+    if not payload:
+        raise HTTPException(status_code=422, detail="at least one setting must be provided")
+
+    yaml_updates: dict[str, object] = {}
+    for key, value in payload.items():
+        if value is None:
+            continue
+        if key == "api_key" and not str(value).strip():
+            continue
+        yaml_updates[f"ai.filename_parser.{key}"] = value
+
+    try:
+        update_yaml_values(_config_dir(fastapi_request), "ai", yaml_updates)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    next_settings = AppSettings.from_yaml(_config_dir(fastapi_request))
+    fastapi_request.app.state.settings = next_settings
+    return _ai_settings_to_api(next_settings.ai_filename_parser or current)
+
+
+@router.post("/ai/models", response_model=AiModelListResponse)
+def list_ai_models(
+    request: AiModelListRequest,
+    settings: AppSettings = Depends(get_app_settings),
+) -> AiModelListResponse:
+    saved = settings.ai_filename_parser or AiFilenameParserConfig()
+    api_key = request.api_key.strip() or saved.api_key.strip()
+    base_url = request.base_url.strip() or saved.base_url.strip()
+    provider = request.provider.strip() or saved.provider
+    if provider != "openai_compatible":
+        raise HTTPException(status_code=422, detail=f"unsupported AI provider: {provider}")
+    if not api_key:
+        raise HTTPException(status_code=422, detail="AI api_key is required")
+    if not base_url:
+        raise HTTPException(status_code=422, detail="AI base_url is required")
+
+    import httpx
+
+    try:
+        response = httpx.get(
+            base_url.rstrip("/") + "/models",
+            headers={"Authorization": f"Bearer {api_key}", "Accept": "application/json"},
+            timeout=request.timeout_seconds,
+        )
+        response.raise_for_status()
+        payload = response.json()
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=502, detail=f"AI models request failed with status {exc.response.status_code}") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc).splitlines()[0][:200]) from exc
+
+    data = payload.get("data") if isinstance(payload, dict) else None
+    if not isinstance(data, list):
+        raise HTTPException(status_code=502, detail="AI models response has invalid format")
+    models = sorted(
+        str(item.get("id", "")).strip()
+        for item in data
+        if isinstance(item, dict) and str(item.get("id", "")).strip()
+    )
+    return AiModelListResponse(models=models)
+
+
+@router.post("/ai/filename/parse", response_model=AiFilenameParseResponse)
+def parse_ai_filename(
+    request: AiFilenameParseRequest,
+    settings: AppSettings = Depends(get_app_settings),
+) -> AiFilenameParseResponse:
+    saved = settings.ai_filename_parser or AiFilenameParserConfig()
+    config = AiFilenameParserConfig(
+        enabled=request.enabled,
+        provider=request.provider.strip() or saved.provider,
+        api_key=request.api_key.strip() or saved.api_key,
+        base_url=request.base_url.strip() or saved.base_url,
+        model=request.model.strip() or saved.model,
+        timeout_seconds=request.timeout_seconds,
+        title_similarity_threshold=request.title_similarity_threshold,
+        prompt=request.prompt.strip() or saved.prompt or DEFAULT_AI_FILENAME_PROMPT,
+    )
+    try:
+        parser = build_ai_filename_parser(config)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if parser is None:
+        raise HTTPException(status_code=422, detail="AI filename parser is disabled")
+    result = parser.parse(request.filename)
+    return AiFilenameParseResponse(
+        filename=request.filename,
+        result=AiFilenameParseResultResponse(**result.__dict__) if result is not None else None,
+    )
+
+
 @router.get("/tmdb/search/movie", response_model=TmdbMovieSearchResponse)
 def search_tmdb_movie(
     query: Annotated[str, Query(min_length=1)],
@@ -1239,6 +1354,20 @@ def _runtime_control_to_api(result: RuntimeControlResult | dict[str, object]) ->
         **_runtime_status_to_api(result).model_dump(),
         action=result.action,
         changed=result.changed,
+    )
+
+
+def _ai_settings_to_api(config: AiFilenameParserConfig | None) -> AiSettingsResponse:
+    config = config or AiFilenameParserConfig()
+    return AiSettingsResponse(
+        enabled=config.enabled,
+        provider=config.provider,
+        base_url=config.base_url,
+        model=config.model,
+        timeout_seconds=config.timeout_seconds,
+        title_similarity_threshold=config.title_similarity_threshold,
+        prompt=config.prompt,
+        has_api_key=bool(config.api_key.strip()),
     )
 
 
@@ -1576,6 +1705,8 @@ def _subscription_to_api(rule: SubscriptionRuleRecord) -> SubscriptionResponse:
         updated_at=rule.updated_at,
         tmdb_id=rule.tmdb_id,
         tmdb_kind=rule.tmdb_kind if rule.tmdb_kind in {"movie", "tv"} else None,
+        year=rule.year,
+        require_year_match=rule.require_year_match,
         aliases=list(rule.aliases),
         poster_path=rule.poster_path,
     )

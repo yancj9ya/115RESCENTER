@@ -13,7 +13,7 @@ class MigrationV2Tests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             db_path = Path(tmp) / "queue.db"
             version = migrate(db_path)
-            self.assertEqual(version, 3)
+            self.assertEqual(version, 4)
 
             repo = RuntimeControlRepository(db_path)
             repo.init_schema()

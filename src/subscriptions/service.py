@@ -42,6 +42,8 @@ class SubscriptionService:
         tmdb_kind: str | None = None,
         aliases: tuple[str, ...] | list[str] | None = None,
         poster_path: str | None = None,
+        year: int | None = None,
+        require_year_match: bool = True,
     ) -> SubscriptionRuleRecord:
         normalised_aliases = _normalise_aliases(aliases)
         validate_subscription_signals(pattern=pattern, tmdb_id=tmdb_id, aliases=normalised_aliases)
@@ -53,6 +55,8 @@ class SubscriptionService:
             tmdb_kind=tmdb_kind,
             aliases=normalised_aliases,
             poster_path=poster_path,
+            year=year,
+            require_year_match=require_year_match,
         )
 
     def list_rules(self) -> list[SubscriptionRuleRecord]:
@@ -72,6 +76,8 @@ class SubscriptionService:
         tmdb_kind: str | None | _Unset = _UNSET,
         aliases: tuple[str, ...] | list[str] | None | _Unset = _UNSET,
         poster_path: str | None | _Unset = _UNSET,
+        year: int | None | _Unset = _UNSET,
+        require_year_match: bool | None = None,
     ) -> SubscriptionRuleRecord | None:
         current = self._repository.get_rule(rule_id)
         if current is None:
@@ -102,6 +108,8 @@ class SubscriptionService:
             tmdb_kind=tmdb_kind,
             aliases=aliases_payload,
             poster_path=poster_path,
+            year=year,
+            require_year_match=require_year_match,
         )
 
     def delete_rule(self, rule_id: int) -> bool:
@@ -152,6 +160,8 @@ class SubscriptionService:
             pattern=record.pattern,
             enabled=record.enabled,
             tmdb_id=record.tmdb_id,
+            year=record.year,
+            require_year_match=record.require_year_match,
             aliases=record.aliases,
         )
         share = CollectedShare(

@@ -23,6 +23,8 @@ class SubscriptionRuleModelTest(unittest.TestCase):
                 "updated_at",
                 "tmdb_id",
                 "tmdb_kind",
+                "year",
+                "require_year_match",
                 "aliases",
                 "poster_path",
             ],
@@ -42,6 +44,8 @@ class SubscriptionRuleModelTest(unittest.TestCase):
         self.assertTrue(record.enabled)
         self.assertIsNone(record.tmdb_id)
         self.assertIsNone(record.tmdb_kind)
+        self.assertIsNone(record.year)
+        self.assertTrue(record.require_year_match)
         self.assertEqual(record.aliases, ())
         with self.assertRaises(Exception):
             record.name = "changed"  # type: ignore[misc]
@@ -91,6 +95,8 @@ class SubscriptionRepositorySchemaTest(unittest.TestCase):
                 connection.close()
             self.assertEqual(columns.get("tmdb_id"), "INTEGER")
             self.assertEqual(columns.get("tmdb_kind"), "TEXT")
+            self.assertEqual(columns.get("year"), "INTEGER")
+            self.assertEqual(columns.get("require_year_match"), "INTEGER")
             self.assertEqual(columns.get("aliases_json"), "TEXT")
 
     def test_init_schema_adds_missing_tmdb_columns_to_legacy_tables(self) -> None:
@@ -129,12 +135,12 @@ class SubscriptionRepositorySchemaTest(unittest.TestCase):
                     for row in connection.execute("PRAGMA table_info(subscription_rules)").fetchall()
                 }
                 row = connection.execute(
-                    "SELECT name, tmdb_id, tmdb_kind, aliases_json FROM subscription_rules"
+                    "SELECT name, tmdb_id, tmdb_kind, year, require_year_match, aliases_json FROM subscription_rules"
                 ).fetchone()
             finally:
                 connection.close()
-            self.assertTrue({"tmdb_id", "tmdb_kind", "aliases_json"}.issubset(columns))
-            self.assertEqual(row, ("legacy", None, None, None))
+            self.assertTrue({"tmdb_id", "tmdb_kind", "year", "require_year_match", "aliases_json"}.issubset(columns))
+            self.assertEqual(row, ("legacy", None, None, None, 1, None))
 
 
 class SubscriptionRepositoryCrudTest(unittest.TestCase):
@@ -258,10 +264,14 @@ class SubscriptionRepositoryTmdbAwareTest(unittest.TestCase):
                 tmdb_id=108545,
                 tmdb_kind="tv",
                 aliases=["三体", "Three-Body", " 3 Body Problem "],
+                year=2024,
+                require_year_match=True,
             )
 
             self.assertEqual(rule.tmdb_id, 108545)
             self.assertEqual(rule.tmdb_kind, "tv")
+            self.assertEqual(rule.year, 2024)
+            self.assertTrue(rule.require_year_match)
             self.assertEqual(rule.aliases, ("三体", "Three-Body", "3 Body Problem"))
 
             loaded = repo.get_rule(rule.id)
@@ -279,17 +289,19 @@ class SubscriptionRepositoryTmdbAwareTest(unittest.TestCase):
 
             self.assertIsNone(rule.tmdb_id)
             self.assertIsNone(rule.tmdb_kind)
+            self.assertIsNone(rule.year)
+            self.assertTrue(rule.require_year_match)
             self.assertEqual(rule.aliases, ())
 
             connection = sqlite3.connect(db_path)
             try:
                 row = connection.execute(
-                    "SELECT tmdb_id, tmdb_kind, aliases_json FROM subscription_rules WHERE id = ?",
+                    "SELECT tmdb_id, tmdb_kind, year, require_year_match, aliases_json FROM subscription_rules WHERE id = ?",
                     (rule.id,),
                 ).fetchone()
             finally:
                 connection.close()
-            self.assertEqual(row, (None, None, None))
+            self.assertEqual(row, (None, None, None, 1, None))
 
     def test_update_rule_can_set_and_clear_tmdb_fields_without_clobbering_others(self) -> None:
         from src.subscriptions.repository import SubscriptionRepository
@@ -306,6 +318,8 @@ class SubscriptionRepositoryTmdbAwareTest(unittest.TestCase):
                 tmdb_id=42,
                 tmdb_kind="movie",
                 aliases=["alpha"],
+                year=2024,
+                require_year_match=True,
             )
 
             updated = repo.update_rule(rule.id, enabled=False)
@@ -314,6 +328,8 @@ class SubscriptionRepositoryTmdbAwareTest(unittest.TestCase):
             self.assertEqual(updated.tmdb_id, 42)
             self.assertEqual(updated.tmdb_kind, "movie")
             self.assertEqual(updated.aliases, ("alpha",))
+            self.assertEqual(updated.year, 2024)
+            self.assertTrue(updated.require_year_match)
             self.assertFalse(updated.enabled)
 
             cleared = repo.update_rule(
@@ -321,11 +337,15 @@ class SubscriptionRepositoryTmdbAwareTest(unittest.TestCase):
                 tmdb_id=None,
                 tmdb_kind=None,
                 aliases=[],
+                year=None,
+                require_year_match=False,
             )
             self.assertIsNotNone(cleared)
             assert cleared is not None
             self.assertIsNone(cleared.tmdb_id)
             self.assertIsNone(cleared.tmdb_kind)
+            self.assertIsNone(cleared.year)
+            self.assertFalse(cleared.require_year_match)
             self.assertEqual(cleared.aliases, ())
 
             replaced = repo.update_rule(rule.id, aliases=["beta", "gamma"])

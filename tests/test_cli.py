@@ -712,6 +712,38 @@ class ParseShareTextCliTest(unittest.TestCase):
             "ticks=1\tresult_count=1\n",
         )
 
+    def test_runtime_worker_uses_settings_intervals_when_cli_overrides_absent(self) -> None:
+        import main as cli_main
+
+        worker_instance = SimpleNamespace(run_until_stopped=lambda max_ticks: [])
+        settings = SimpleNamespace(
+            runtime_interval_seconds=7,
+            runtime_sweep_interval_seconds=123,
+            rank_refresh_interval_seconds=456,
+        )
+        stdout = io.StringIO()
+
+        with tempfile.TemporaryDirectory() as tmp_dir, \
+             patch.object(cli_main, "RuntimeFactory", return_value=SimpleNamespace(settings=settings)), \
+             patch.object(cli_main, "EventDrivenRuntime", return_value=worker_instance) as worker_cls, \
+             patch.object(worker_instance, "run_until_stopped", return_value=[]) as run_until_stopped, \
+             patch.object(sys, "argv", [
+                 "main.py",
+                 "runtime-worker",
+                 "--db-path",
+                 str(Path(tmp_dir) / "runtime.db"),
+                 "--max-ticks",
+                 "1",
+             ]), \
+             patch("sys.stdout", new=stdout):
+            cli_main.main()
+
+        worker_cls.assert_called_once()
+        self.assertEqual(worker_instance._interval_seconds, 7)
+        self.assertEqual(worker_instance._sweep_interval_seconds, 123)
+        self.assertEqual(worker_instance._rank_refresh_interval_seconds, 456)
+        run_until_stopped.assert_called_once_with(max_ticks=1)
+
     def test_runtime_worker_max_ticks_calls_run_until_stopped_with_override_interval(self) -> None:
         import main as cli_main
 
@@ -731,12 +763,15 @@ class ParseShareTextCliTest(unittest.TestCase):
                  "3",
                  "--tick-seconds",
                  "11",
+                 "--sweep-seconds",
+                 "22",
              ]), \
              patch("sys.stdout", new=stdout):
             cli_main.main()
 
         worker_cls.assert_called_once()
         self.assertEqual(worker_instance._interval_seconds, 11)
+        self.assertEqual(worker_instance._sweep_interval_seconds, 22)
         run_until_stopped.assert_called_once_with(max_ticks=3)
         self.assertEqual(stdout.getvalue(), "ticks=3\tresult_count=0\n")
 

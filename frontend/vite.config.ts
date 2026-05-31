@@ -30,6 +30,7 @@ export default defineConfig(({ mode }) => {
         '/transfer-queue': backendTarget,
         '/logs': backendTarget,
         '/notification': backendTarget,
+        '/ai': backendTarget,
       },
     },
   }

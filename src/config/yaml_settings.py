@@ -57,6 +57,46 @@ class TmdbConfig:
 
 
 @dataclass
+class AiFilenameParserYamlConfig:
+    """AI 文件名解析配置"""
+
+    enabled: bool = False
+    provider: str = "openai_compatible"
+    api_key: str = ""
+    base_url: str = ""
+    model: str = ""
+    timeout_seconds: float = 30.0
+    title_similarity_threshold: float = 0.55
+    prompt: str = ""
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "AiFilenameParserYamlConfig":
+        ai_config = data.get("ai", {})
+        parser_config = ai_config.get("filename_parser", {})
+        return cls(
+            enabled=parser_config.get("enabled", False),
+            provider=parser_config.get("provider", "openai_compatible"),
+            api_key=parser_config.get("api_key", ""),
+            base_url=parser_config.get("base_url", ""),
+            model=parser_config.get("model", ""),
+            timeout_seconds=parser_config.get("timeout_seconds", 30.0),
+            title_similarity_threshold=parser_config.get("title_similarity_threshold", 0.55),
+            prompt=parser_config.get("prompt", ""),
+        )
+
+
+@dataclass
+class AiConfig:
+    """AI 配置"""
+
+    filename_parser: AiFilenameParserYamlConfig = field(default_factory=AiFilenameParserYamlConfig)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "AiConfig":
+        return cls(filename_parser=AiFilenameParserYamlConfig.from_dict(data))
+
+
+@dataclass
 class OrganizeConfig:
     """整理配置"""
 
@@ -333,6 +373,7 @@ class AppConfig:
     notification: NotificationConfig = field(default_factory=NotificationConfig)
     api: ApiConfig = field(default_factory=ApiConfig)
     runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
+    ai: AiConfig = field(default_factory=AiConfig)
 
     @classmethod
     def from_yaml(cls, config_dir: str | Path = "config") -> "AppConfig":
@@ -358,6 +399,7 @@ class AppConfig:
             notification=NotificationConfig.from_dict(all_config.get("notification", {})),
             api=ApiConfig.from_dict(all_config.get("api", {})),
             runtime=RuntimeConfig.from_dict(all_config.get("runtime", {})),
+            ai=AiConfig.from_dict(all_config.get("ai", {})),
         )
 
     @classmethod
@@ -381,11 +423,14 @@ class AppConfig:
             notification=NotificationConfig.from_dict(all_config.get("notification", {})),
             api=ApiConfig.from_dict(all_config.get("api", {})),
             runtime=RuntimeConfig.from_dict(all_config.get("runtime", {})),
+            ai=AiConfig.from_dict(all_config.get("ai", {})),
         )
 
 
 __all__ = [
     "AppConfig",
+    "AiConfig",
+    "AiFilenameParserYamlConfig",
     "NetdiskConfig",
     "TmdbConfig",
     "OrganizeConfig",

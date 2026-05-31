@@ -30,6 +30,25 @@ class TelegramWebCollectorTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("新资源", shares[0].message_text)
         self.assertEqual(shares[0].published_at, datetime(2026, 5, 26, 8, 30, tzinfo=timezone.utc))
 
+    async def test_collect_history_extracts_115_links_from_anchor_href(self) -> None:
+        html = """
+        <div class="tgme_widget_message" data-post="movie_channel/106">
+          <div class="tgme_widget_message_text js-message_text">
+            🔗 链接：<a href="https://115cdn.com/s/swsnf9s3zrk?password=t58d">点击跳转</a>
+          </div>
+        </div>
+        """
+
+        collector = TelegramWebCollector(fetcher=lambda _url: html)
+        shares = await collector.collect_history("movie_channel")
+
+        self.assertEqual(len(shares), 1)
+        self.assertEqual(shares[0].message_id, "106")
+        self.assertEqual(shares[0].share_code, "swsnf9s3zrk")
+        self.assertEqual(shares[0].receive_code, "t58d")
+        self.assertEqual(shares[0].share_url, "https://115cdn.com/s/swsnf9s3zrk?password=t58d")
+        self.assertIn("点击跳转", shares[0].message_text)
+
     async def test_collect_history_deduplicates_same_share_across_messages(self) -> None:
         html = """
         <div class="tgme_widget_message" data-post="movie_channel/101">

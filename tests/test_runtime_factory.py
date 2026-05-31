@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 from src.config.settings import AppSettings
 from src.organizing import MEDIA_KIND_MOVIE, OrganizeMetadata, OrganizeRule
+from src.organizing.ai_filename_parser import AiFilenameParserConfig
 from src.processors.fakes import FakeMetadataResolver, FakeOrganizeStorage, FakeTransferStorage
 from src.storage import Storage115Config, Storage115Error
 
@@ -75,6 +76,64 @@ class RuntimeFactoryTest(unittest.TestCase):
         self.assertIs(organize._storage, transfer_storage)
         self.assertIs(organize._metadata_resolver, resolver)
         self.assertEqual(organize._rule, rule)
+
+    def test_ai_filename_parser_is_wired_when_enabled(self) -> None:
+        from src.runtime.factory import RuntimeFactory
+
+        settings = AppSettings(
+            transfer_cid=9001,
+            tmdb=object(),
+            ai_filename_parser=AiFilenameParserConfig(
+                enabled=True,
+                api_key="key",
+                base_url="https://api.example.test/v1",
+                model="model",
+                title_similarity_threshold=0.8,
+            ),
+        )
+        storage = FakeOrganizeStorage(items=[])
+        rule = OrganizeRule(media_library_root_cid=100)
+        metadata = OrganizeMetadata(title="主角", year=2026, kind=MEDIA_KIND_MOVIE)
+
+        with tempfile.TemporaryDirectory() as tmp_dir, \
+             patch("src.organizing.tmdb.TmdbMultiResolver.resolve_multi", autospec=True, return_value=metadata):
+            factory = RuntimeFactory(db_path=Path(tmp_dir) / "runtime.db", settings=settings, storage=storage, organizer_rule=rule)
+            service = factory.build_organize_run_service()
+
+        self.assertIsNotNone(service._ai_filename_parser)
+        self.assertIsNotNone(service._title_resolver)
+        self.assertEqual(service._title_similarity_threshold, 0.8)
+
+    def test_app_settings_loads_ai_filename_parser_config_from_yaml(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config_dir = Path(tmp_dir)
+            (config_dir / "ai.yml").write_text(
+                """
+ai:
+  filename_parser:
+    enabled: true
+    provider: openai_compatible
+    api_key: key
+    base_url: https://api.example.test/v1
+    model: parser-model
+    timeout_seconds: 12.5
+    title_similarity_threshold: 0.75
+    prompt: custom prompt
+""".strip(),
+                encoding="utf-8",
+            )
+
+            settings = AppSettings.from_yaml(config_dir)
+
+        self.assertIsNotNone(settings.ai_filename_parser)
+        assert settings.ai_filename_parser is not None
+        self.assertTrue(settings.ai_filename_parser.enabled)
+        self.assertEqual(settings.ai_filename_parser.api_key, "key")
+        self.assertEqual(settings.ai_filename_parser.base_url, "https://api.example.test/v1")
+        self.assertEqual(settings.ai_filename_parser.model, "parser-model")
+        self.assertEqual(settings.ai_filename_parser.timeout_seconds, 12.5)
+        self.assertEqual(settings.ai_filename_parser.title_similarity_threshold, 0.75)
+        self.assertEqual(settings.ai_filename_parser.prompt, "custom prompt")
 
     def test_default_metadata_resolver_cleans_filename_before_tmdb_search(self) -> None:
         from src.organizing.tmdb import TmdbConfig

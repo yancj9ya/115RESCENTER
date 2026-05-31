@@ -86,22 +86,13 @@ export function useSubscriptions() {
     }
   }, [])
 
-  function storeRule(rule: SubscriptionRule) {
-    setRules((current) => {
-      const existing = current.some((item) => item.id === rule.id)
-      return existing
-        ? current.map((item) => (item.id === rule.id ? rule : item))
-        : [...current, rule]
-    })
-  }
-
   const createRule = useCallback(async (payload: SubscriptionCreateRequest) => {
     setSaveState({ error: null, loading: true })
 
     try {
       const rule = await createSubscription(payload)
-      storeRule(rule)
-      return rule
+      const refreshedRules = await loadRules()
+      return refreshedRules.find((item) => item.id === rule.id) ?? rule
     } catch (caught) {
       const message = errorMessage(caught)
       setSaveState({ error: message, loading: false })
@@ -109,15 +100,15 @@ export function useSubscriptions() {
     } finally {
       setSaveState((current) => ({ ...current, loading: false }))
     }
-  }, [])
+  }, [loadRules])
 
   const updateRule = useCallback(async (id: number, payload: SubscriptionUpdateRequest) => {
     setSaveState({ error: null, loading: true })
 
     try {
       const rule = await updateSubscription(id, payload)
-      storeRule(rule)
-      return rule
+      const refreshedRules = await loadRules()
+      return refreshedRules.find((item) => item.id === rule.id) ?? rule
     } catch (caught) {
       const message = errorMessage(caught)
       setSaveState({ error: message, loading: false })
@@ -125,7 +116,7 @@ export function useSubscriptions() {
     } finally {
       setSaveState((current) => ({ ...current, loading: false }))
     }
-  }, [])
+  }, [loadRules])
 
   const saveRule = useCallback<SaveRule>((payload: SubscriptionCreateRequest | SubscriptionUpdateRequest, id?: number) => {
     return id === undefined ? createRule(payload as SubscriptionCreateRequest) : updateRule(id, payload)

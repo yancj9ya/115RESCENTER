@@ -54,6 +54,8 @@ class SubscriptionApiContractSchemaTest(unittest.TestCase):
                 "updated_at": "2026-05-27T10:00:00",
                 "tmdb_id": None,
                 "tmdb_kind": None,
+                "year": None,
+                "require_year_match": True,
                 "aliases": [],
                 "poster_path": None,
             },
@@ -84,6 +86,8 @@ class SubscriptionApiContractSchemaTest(unittest.TestCase):
                 "enabled": True,
                 "tmdb_id": None,
                 "tmdb_kind": None,
+                "year": None,
+                "require_year_match": True,
                 "aliases": [],
                 "poster_path": None,
             },
@@ -96,6 +100,8 @@ class SubscriptionApiContractSchemaTest(unittest.TestCase):
                 "enabled": False,
                 "tmdb_id": None,
                 "tmdb_kind": None,
+                "year": None,
+                "require_year_match": None,
                 "aliases": None,
                 "poster_path": None,
             },
@@ -171,7 +177,7 @@ class FastApiSubscriptionEndpointContractTest(unittest.TestCase):
             created_payload = created.json()
             self.assertEqual(
                 set(created_payload),
-                {"id", "name", "pattern", "enabled", "created_at", "updated_at", "tmdb_id", "tmdb_kind", "aliases", "poster_path"},
+                {"id", "name", "pattern", "enabled", "created_at", "updated_at", "tmdb_id", "tmdb_kind", "year", "require_year_match", "aliases", "poster_path"},
             )
             self.assertEqual(created_payload["name"], "Movies 1080p")
             self.assertEqual(created_payload["pattern"], "1080p")
@@ -327,6 +333,8 @@ class SubscriptionTmdbAwareEndpointTest(unittest.TestCase):
                     "enabled": True,
                     "tmdb_id": 108545,
                     "tmdb_kind": "tv",
+                    "year": 2024,
+                    "require_year_match": True,
                     "aliases": ["三体", "Three-Body", "3 Body Problem"],
                 },
             )
@@ -335,10 +343,14 @@ class SubscriptionTmdbAwareEndpointTest(unittest.TestCase):
             payload = response.json()
             self.assertEqual(payload["tmdb_id"], 108545)
             self.assertEqual(payload["tmdb_kind"], "tv")
+            self.assertEqual(payload["year"], 2024)
+            self.assertTrue(payload["require_year_match"])
             self.assertEqual(payload["aliases"], ["三体", "Three-Body", "3 Body Problem"])
 
             fetched = client.get(f"/subscriptions/{payload['id']}").json()
             self.assertEqual(fetched["tmdb_id"], 108545)
+            self.assertEqual(fetched["year"], 2024)
+            self.assertTrue(fetched["require_year_match"])
             self.assertEqual(fetched["aliases"], ["三体", "Three-Body", "3 Body Problem"])
 
     def test_create_subscription_rejects_when_no_signals_provided(self) -> None:
@@ -378,6 +390,8 @@ class SubscriptionTmdbAwareEndpointTest(unittest.TestCase):
                     "name": "三体",
                     "tmdb_id": 108545,
                     "tmdb_kind": "tv",
+                    "year": 2024,
+                    "require_year_match": True,
                     "aliases": ["三体", "Three-Body"],
                 },
             ).json()
@@ -390,13 +404,17 @@ class SubscriptionTmdbAwareEndpointTest(unittest.TestCase):
             self.assertEqual(patched.status_code, 200)
             self.assertEqual(patched.json()["aliases"], ["三体", "三体 (剧集)"])
             self.assertEqual(patched.json()["tmdb_id"], 108545)
+            self.assertEqual(patched.json()["year"], 2024)
+            self.assertTrue(patched.json()["require_year_match"])
 
             patched2 = client.patch(
                 f"/subscriptions/{created['id']}",
-                json={"pattern": "三体", "tmdb_id": None, "aliases": []},
+                json={"pattern": "三体", "tmdb_id": None, "year": None, "require_year_match": False, "aliases": []},
             )
             self.assertEqual(patched2.status_code, 200)
             self.assertIsNone(patched2.json()["tmdb_id"])
+            self.assertIsNone(patched2.json()["year"])
+            self.assertFalse(patched2.json()["require_year_match"])
             self.assertEqual(patched2.json()["aliases"], [])
             self.assertEqual(patched2.json()["pattern"], "三体")
 
@@ -426,6 +444,8 @@ class SubscriptionTmdbAwareEndpointTest(unittest.TestCase):
                     "name": "三体",
                     "tmdb_id": 108545,
                     "tmdb_kind": "tv",
+                    "year": 2024,
+                    "require_year_match": True,
                     "aliases": ["三体", "Three-Body", "3 Body Problem"],
                 },
             )
@@ -435,6 +455,8 @@ class SubscriptionTmdbAwareEndpointTest(unittest.TestCase):
                     "name": "Inception",
                     "tmdb_id": 27205,
                     "tmdb_kind": "movie",
+                    "year": 2010,
+                    "require_year_match": False,
                     "aliases": ["盗梦空间", "Inception"],
                 },
             )
@@ -447,8 +469,12 @@ class SubscriptionTmdbAwareEndpointTest(unittest.TestCase):
         by_name = {item["name"]: item for item in items}
         self.assertEqual(by_name["三体"]["tmdb_kind"], "tv")
         self.assertEqual(by_name["三体"]["tmdb_id"], 108545)
+        self.assertEqual(by_name["三体"]["year"], 2024)
+        self.assertTrue(by_name["三体"]["require_year_match"])
         self.assertEqual(by_name["三体"]["aliases"], ["三体", "Three-Body", "3 Body Problem"])
         self.assertEqual(by_name["Inception"]["tmdb_kind"], "movie")
+        self.assertEqual(by_name["Inception"]["year"], 2010)
+        self.assertFalse(by_name["Inception"]["require_year_match"])
         self.assertEqual(by_name["Inception"]["aliases"], ["盗梦空间", "Inception"])
 
 

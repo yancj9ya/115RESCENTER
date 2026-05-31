@@ -20,6 +20,8 @@ class SubscriptionRule:
     pattern: str = ""
     enabled: bool = True
     tmdb_id: int | None = None
+    year: int | None = None
+    require_year_match: bool = True
     aliases: tuple[str, ...] = field(default_factory=tuple)
 
 
@@ -41,6 +43,7 @@ class SubscriptionMatcher:
         searchable_lower = searchable_text.lower()
 
         logger.debug(f"匹配分享链接: {share.share_url}")
+        logger.debug(f"待匹配内容: {_preview_match_text(searchable_text)}")
 
         for rule, prepared in self._prepared:
             if not rule.enabled:
@@ -48,6 +51,9 @@ class SubscriptionMatcher:
 
             hits = _collect_hits(prepared, searchable_text, searchable_lower)
             if not hits:
+                continue
+
+            if not _year_matches(rule, share.message_text):
                 continue
 
             logger.info(f"匹配成功: 规则 '{rule.name}' (ID: {rule.id}), 关键词: {hits}, 链接: {share.share_url}")
@@ -61,6 +67,28 @@ class SubscriptionMatcher:
             )
 
         return matches
+
+
+def _preview_match_text(text: str, *, limit: int = 500) -> str:
+    normalized = " ".join(text.split())
+    if len(normalized) <= limit:
+        return normalized
+    return f"{normalized[:limit]}..."
+
+
+def _year_matches(rule: SubscriptionRule, text: str) -> bool:
+    if not rule.require_year_match or rule.year is None:
+        return True
+    years = _extract_years(text)
+    if rule.year in years:
+        logger.debug(f"年份匹配成功: 规则 '{rule.name}' (ID: {rule.id}), 订阅年份={rule.year}, 文本年份={sorted(years)}")
+        return True
+    logger.info(f"年份匹配失败: 规则 '{rule.name}' (ID: {rule.id}), 订阅年份={rule.year}, 文本年份={sorted(years)}")
+    return False
+
+
+def _extract_years(text: str) -> set[int]:
+    return {int(match) for match in re.findall(r"(?<!\d)(?:19|20)\d{2}(?!\d)", text)}
 
 
 def validate_subscription_pattern(pattern: str) -> None:
